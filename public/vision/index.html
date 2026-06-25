@@ -666,14 +666,19 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
   function connectWebSocket() {
     setStatus('connecting');
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Pass system prompt and lang to server via query params — server sends setup to Gemini
-    const system = encodeURIComponent(buildSystemPrompt());
-    const url = wsProtocol + '//' + location.host + '/vision-ws?lang=' + encodeURIComponent(state.lang) + '&system=' + system;
+    const url = wsProtocol + '//' + location.host + '/vision-ws';
     const ws = new WebSocket(url);
     state.ws = ws;
 
     ws.onopen = () => {
-      console.log('[client] Connected to proxy — server will send setup to Gemini');
+      // Send system prompt as first message — server uses this to set up Gemini
+      ws.send(JSON.stringify({
+        rockit_setup: {
+          system: buildSystemPrompt(),
+          lang: state.lang
+        }
+      }));
+      console.log('[client] Sent system prompt to proxy');
     };
 
     ws.onmessage = async (event) => {
