@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="RockIt Vision">
 <link rel="manifest" href="/vision/manifest.json">
 <link rel="apple-touch-icon" href="/vision/icon-192.png">
-<title>RockIt Vision — Live Assistant Prototype</title>
+<title>RockIt Vision</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -131,6 +131,7 @@
     color: #f2f2f0; font-size: 14px; outline: none;
   }
   .field-input:focus { border-color: #7c6cff; }
+  .field-input option { background: #1a1a2e; color: #f2f2f0; }
   .start-btn {
     margin-top: 22px; width: 100%; padding: 13px; border-radius: 10px;
     background: #f2f2f0; color: #0b0b0d; border: none; font-size: 14.5px; font-weight: 600;
@@ -164,8 +165,8 @@
 <div id="app">
 
   <div class="setup-screen" id="setupScreen">
-    <h1>RockIt Vision — prototype</h1>
-    <p class="sub">An always-listening, always-watching shopping &amp; paperwork assistant. This is a Phase 1 prototype: foreground-only (browser tabs can't keep camera/mic running in the background), running directly against the Gemini Live API from your phone's browser.</p>
+    <h1>RockIt Vision</h1>
+    <p class="sub">Your AI-powered live assistant — sees and hears the world with you.</p>
 
     <div class="field-label">Assistant mode</div>
     <select class="field-input" id="modeSelect">
