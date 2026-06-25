@@ -1,4 +1,4 @@
-require('dotenv').config();
+try { require('dotenv').config(); } catch(_) {}
 const express = require('express');
 const http    = require('http');
 const WebSocket = require('ws');
