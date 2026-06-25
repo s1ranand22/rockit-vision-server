@@ -666,21 +666,14 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
   function connectWebSocket() {
     setStatus('connecting');
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = wsProtocol + '//' + location.host + '/vision-ws';
+    // Pass system prompt and lang to server via query params — server sends setup to Gemini
+    const system = encodeURIComponent(buildSystemPrompt());
+    const url = wsProtocol + '//' + location.host + '/vision-ws?lang=' + encodeURIComponent(state.lang) + '&system=' + system;
     const ws = new WebSocket(url);
     state.ws = ws;
 
     ws.onopen = () => {
-      const setupMsg = {
-        setup: {
-          model: 'models/gemini-3.1-flash-live-preview',
-          generationConfig: { responseModalities: ['AUDIO'] },
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          systemInstruction: { parts: [{ text: buildSystemPrompt() }] }
-        }
-      };
-      ws.send(JSON.stringify(setupMsg));
+      console.log('[client] Connected to proxy — server will send setup to Gemini');
     };
 
     ws.onmessage = async (event) => {
