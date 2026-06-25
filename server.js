@@ -9,8 +9,8 @@ const GEMINI_KEY  = process.env.GEMINI_API_KEY;
 const GEMINI_URL  = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
 if (!GEMINI_KEY || GEMINI_KEY === 'paste_your_gemini_key_here') {
-  console.error('\n❌  GEMINI_API_KEY is not set in .env — server cannot start.\n');
-  process.exit(1);
+  console.error('\n❌  GEMINI_API_KEY is not set — WebSocket proxy will not work.\n');
+  // Don't exit — let the server start so Railway healthcheck passes
 }
 
 // ── Express app ────────────────────────────────────────────────────────────
