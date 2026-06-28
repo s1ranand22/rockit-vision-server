@@ -988,71 +988,61 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
 
   if (!isNativeApp) return;
 
+
   // Show the record button
   const btn = document.getElementById('recordBtn');
   if (btn) btn.style.display = 'flex';
 
-  let isRecording = false;
   let lastFilePath = null;
+  let busy = false; // prevent double-tap
 
-  // Sync JS state with native plugin state
-  async function syncRecordingState() {
-    try {
-      const res = await window.Capacitor.Plugins.ScreenRecord.isRecording();
-      isRecording = res.recording;
-      if (btn) {
-        btn.textContent = isRecording ? '⏹' : '⏺';
-        btn.style.background = isRecording ? 'rgba(239,68,68,0.8)' : 'rgba(0,0,0,0.6)';
-        btn.style.border = isRecording ? '2px solid #ef4444' : '2px solid rgba(255,255,255,0.3)';
-        btn.style.animation = isRecording ? 'recpulse 1.5s infinite' : '';
-      }
-    } catch(e) {}
+  // Use sessionStorage to persist recording state across visibility changes
+  function getRecording() { return sessionStorage.getItem('rvRecording') === '1'; }
+  function setRecording(v) {
+    sessionStorage.setItem('rvRecording', v ? '1' : '0');
+    if (btn) {
+      btn.textContent = v ? '⏹' : '⏺';
+      btn.style.background = v ? 'rgba(239,68,68,0.8)' : 'rgba(0,0,0,0.6)';
+      btn.style.border = v ? '2px solid #ef4444' : '2px solid rgba(255,255,255,0.3)';
+      btn.style.animation = v ? 'recpulse 1.5s infinite' : '';
+    }
   }
 
-  // Sync on load and when returning from background (e.g. after permission dialog)
-  syncRecordingState();
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) syncRecordingState();
-  });
+  // Restore button state on load
+  setRecording(getRecording());
 
   window.toggleRecording = async function() {
+    if (busy) return;
     if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.ScreenRecord) {
-      alert('Screen recording plugin not available. Make sure you are using the RockIt Vision app.');
+      alert('Screen recording plugin not available.');
       return;
     }
 
-    // Always check native state before deciding what to do
-    await syncRecordingState();
+    busy = true;
+    btn.style.opacity = '0.5';
 
-    if (!isRecording) {
+    if (!getRecording()) {
       try {
         await window.Capacitor.Plugins.ScreenRecord.startRecording();
-        isRecording = true;
-        btn.textContent = '⏹';
-        btn.style.background = 'rgba(239,68,68,0.8)';
-        btn.style.border = '2px solid #ef4444';
-        btn.style.animation = 'recpulse 1.5s infinite';
-        btn.title = 'Stop recording';
+        setRecording(true);
       } catch (e) {
         alert('Could not start recording: ' + (e.message || e));
       }
     } else {
       try {
         const result = await window.Capacitor.Plugins.ScreenRecord.stopRecording();
-        isRecording = false;
-        btn.textContent = '⏺';
-        btn.style.background = 'rgba(0,0,0,0.6)';
-        btn.style.border = '2px solid rgba(255,255,255,0.3)';
-        btn.style.animation = '';
-
+        setRecording(false);
         lastFilePath = result.filePath;
         document.getElementById('savedPath').textContent = result.filePath || '';
-        const sheet = document.getElementById('shareSheet');
-        sheet.style.display = 'flex';
+        document.getElementById('shareSheet').style.display = 'flex';
       } catch (e) {
         alert('Could not stop recording: ' + (e.message || e));
       }
     }
+
+    btn.style.opacity = '1';
+    busy = false;
+  };
   };
 
   window.shareVideo = async function() {
