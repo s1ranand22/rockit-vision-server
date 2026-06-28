@@ -261,6 +261,31 @@
     <div class="status-pill"><span class="status-dot" id="statusDot"></span><span id="statusText">idle</span></div>
   </div>
 
+  <!-- Record button — only shown in native Android app -->
+  <button id="recordBtn" style="
+    display:none; position:fixed; bottom:180px; right:14px; z-index:200;
+    width:48px; height:48px; border-radius:50%;
+    border:2px solid rgba(255,255,255,0.3); background:rgba(0,0,0,0.6);
+    color:white; font-size:20px; align-items:center; justify-content:center;
+    backdrop-filter:blur(6px); cursor:pointer;" onclick="toggleRecording()">⏺</button>
+
+  <!-- Share sheet — shown after recording stops -->
+  <div id="shareSheet" style="display:none; position:fixed; inset:0; z-index:300;
+    background:rgba(0,0,0,0.75); align-items:flex-end; justify-content:center;">
+    <div style="background:#1a1a2e; border-radius:20px 20px 0 0;
+      padding:20px 20px 32px; width:100%; font-family:-apple-system,sans-serif; color:#f2f2f0;">
+      <h3 style="margin:0 0 6px; font-size:16px;">Recording saved!</h3>
+      <p style="margin:0 0 8px; font-size:12px; color:#75756f;">Your session has been recorded.</p>
+      <p id="savedPath" style="font-size:11px; color:#7c6cff; word-break:break-all; margin:0 0 16px;"></p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button onclick="shareVideo()" style="padding:13px; border-radius:10px; border:none;
+          background:#7c6cff; color:white; font-size:14px; font-weight:600;">Share video</button>
+        <button onclick="closeShareSheet()" style="padding:13px; border-radius:10px; border:none;
+          background:rgba(255,255,255,0.1); color:#f2f2f0; font-size:14px;">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="mode-bar" id="modeBar"></div>
 
   <div class="hint-overlay" id="hintOverlay">Point the camera and talk — the assistant sees and hears continuously while live</div>
@@ -722,7 +747,8 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
       ws.send(JSON.stringify({
         rockit_setup: {
           system: buildSystemPrompt(),
-          lang: state.lang
+          lang: state.lang,
+          mode: state.mode
         }
       }));
       console.log('[client] Sent system prompt to proxy');
@@ -953,6 +979,80 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
     }
   }
 
+})();
+
+// ── Native screen recording (Android app only) ──────────────────────────────
+(function() {
+  const isNativeApp = window.location.search.includes('app=android') ||
+    (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+  if (!isNativeApp) return;
+
+  // Show the record button
+  const btn = document.getElementById('recordBtn');
+  if (btn) btn.style.display = 'flex';
+
+  let isRecording = false;
+  let lastFilePath = null;
+
+  window.toggleRecording = async function() {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.ScreenRecord) {
+      alert('Screen recording plugin not available. Make sure you are using the RockIt Vision app.');
+      return;
+    }
+
+    if (!isRecording) {
+      try {
+        await window.Capacitor.Plugins.ScreenRecord.startRecording();
+        isRecording = true;
+        btn.textContent = '⏹';
+        btn.style.background = 'rgba(239,68,68,0.8)';
+        btn.style.border = '2px solid #ef4444';
+        btn.style.animation = 'recpulse 1.5s infinite';
+        btn.title = 'Stop recording';
+      } catch (e) {
+        alert('Could not start recording: ' + (e.message || e));
+      }
+    } else {
+      try {
+        const result = await window.Capacitor.Plugins.ScreenRecord.stopRecording();
+        isRecording = false;
+        btn.textContent = '⏺';
+        btn.style.background = 'rgba(0,0,0,0.6)';
+        btn.style.border = '2px solid rgba(255,255,255,0.3)';
+        btn.style.animation = '';
+
+        lastFilePath = result.filePath;
+        document.getElementById('savedPath').textContent = result.filePath || '';
+        const sheet = document.getElementById('shareSheet');
+        sheet.style.display = 'flex';
+      } catch (e) {
+        alert('Could not stop recording: ' + (e.message || e));
+      }
+    }
+  };
+
+  window.shareVideo = async function() {
+    if (!lastFilePath) return;
+    try {
+      await window.Capacitor.Plugins.Share.share({
+        title: 'RockIt Vision session',
+        text: 'My AI assistant just haggled for me at the market! \uD83E\uDD2F Try RockIt Vision \u2192 https://play.google.com/store/apps/details?id=com.rockitweb.vision #rockitvision #AIassistant #IndiaAI',
+        url: 'file://' + lastFilePath,
+        dialogTitle: 'Share your RockIt Vision session'
+      });
+    } catch (e) { /* user cancelled */ }
+    window.closeShareSheet();
+  };
+
+  window.closeShareSheet = function() {
+    document.getElementById('shareSheet').style.display = 'none';
+  };
+
+  // Add pulse animation for recording state
+  const style = document.createElement('style');
+  style.textContent = '@keyframes recpulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.4)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }';
+  document.head.appendChild(style);
 })();
 </script>
 </body>
