@@ -394,25 +394,44 @@ function connectWebSocket() {
   ws.onclose = (e) => { setStatus('idle'); if (state.live) addBubble('system', 'Session closed ('+( e.reason||e.code)+').'); stopSession(false); };
 }
 
+
 // ── Auto-recording ────────────────────────────────────────────────────────
 function startAutoRecording() {
   if (!state.stream) { console.warn('[rec] No stream'); return; }
   try {
     state.recordedChunks = [];
 
-    // Use video-only track to avoid mic conflict with Web Audio API
+    // Get video track
     const videoTrack = state.stream.getVideoTracks()[0];
     if (!videoTrack) { console.warn('[rec] No video track'); return; }
-    const videoOnlyStream = new MediaStream([videoTrack]);
+
+    // Capture AI audio output from playback AudioContext
+    // We create a MediaStreamDestination from the gainNode so we get the AI voice
+    let audioTrack = null;
+    try {
+      const ctx = ensurePlaybackCtx();
+      const dest = ctx.createMediaStreamDestination();
+      state.gainNode.connect(dest);
+      state.recordingAudioDest = dest; // save ref to disconnect later
+      audioTrack = dest.stream.getAudioTracks()[0];
+      console.log('[rec] Audio track from playback ctx:', audioTrack ? 'ok' : 'none');
+    } catch(e) {
+      console.warn('[rec] Could not get audio track:', e);
+    }
+
+    // Build combined stream: video + AI audio
+    const tracks = [videoTrack];
+    if (audioTrack) tracks.push(audioTrack);
+    const recordStream = new MediaStream(tracks);
 
     // Use video/mp4 — required for WhatsApp/Instagram sharing
     const mimeType = ['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
       .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch(e) { return false; } }) || '';
 
-    console.log('[rec] Supported mimeType:', mimeType || 'none — using default');
+    console.log('[rec] mimeType:', mimeType || 'default', '| tracks:', tracks.length);
     const options = mimeType ? { mimeType } : {};
 
-    state.mediaRecorder = new MediaRecorder(videoOnlyStream, options);
+    state.mediaRecorder = new MediaRecorder(recordStream, options);
     state.recordingMimeType = state.mediaRecorder.mimeType || mimeType || 'video/webm';
 
     state.mediaRecorder.ondataavailable = (e) => {
@@ -426,8 +445,13 @@ function startAutoRecording() {
       console.error('[rec] MediaRecorder error:', e);
     };
 
-    state.mediaRecorder.start(2000); // collect chunk every 2 seconds
+    state.mediaRecorder.start(2000);
     els.recIndicator.style.display = 'flex';
+    console.log('[rec] Started, state:', state.mediaRecorder.state);
+  } catch(e) {
+    console.error('[rec] Could not start:', e.name, e.message);
+  }
+}
     console.log('[rec] Started successfully, state:', state.mediaRecorder.state);
   } catch(e) {
     console.error('[rec] Could not start:', e.name, e.message);
@@ -439,41 +463,46 @@ function stopAutoRecording() {
   if (!state.mediaRecorder) { console.warn('[rec] No mediaRecorder to stop'); return; }
   if (state.mediaRecorder.state === 'inactive') { console.warn('[rec] Already inactive'); return; }
 
+  // Disconnect recording audio destination
+  if (state.recordingAudioDest) {
+    try { state.gainNode.disconnect(state.recordingAudioDest); } catch(e) {}
+    state.recordingAudioDest = null;
+  }
+
   const recorder = state.mediaRecorder;
   const mimeType = state.recordingMimeType || 'video/webm';
   state.mediaRecorder = null;
 
   recorder.onstop = () => {
     console.log('[rec] onstop fired, chunks:', state.recordedChunks.length);
-    if (state.recordedChunks.length === 0) {
-      console.warn('[rec] No chunks recorded');
-      return;
-    }
+    if (state.recordedChunks.length === 0) { console.warn('[rec] No chunks recorded'); return; }
     const blob = new Blob(state.recordedChunks, { type: mimeType });
     state.recordedChunks = [];
     state.lastBlob = blob;
     console.log('[rec] Blob created, size:', blob.size, 'type:', mimeType);
     if (blob.size > 1000) {
       const mb = (blob.size / 1024 / 1024).toFixed(1);
-      els.shareInfo.textContent = mb + ' MB · tap Share to post to Instagram, WhatsApp, etc.';
+      els.shareInfo.textContent = mb + ' MB · tap Share to post to WhatsApp, Instagram, etc.';
       els.shareSheet.style.display = 'flex';
     } else {
       console.warn('[rec] Blob too small:', blob.size);
     }
   };
 
-  try {
-    recorder.stop();
-    console.log('[rec] stop() called');
-  } catch(e) {
-    console.error('[rec] Error stopping:', e);
-  }
+  try { recorder.stop(); console.log('[rec] stop() called'); }
+  catch(e) { console.error('[rec] Error stopping:', e); }
 }
 
 // Share button handler
 els.shareBtn.addEventListener('click', async () => {
   if (!state.lastBlob) return;
   els.shareSheet.style.display = 'none';
+
+  const SHARE_CAPTION = 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI';
+
+  // Copy caption to clipboard immediately (requires user gesture — this is it)
+  try { await navigator.clipboard.writeText(SHARE_CAPTION); console.log('[share] Caption copied to clipboard'); }
+  catch(e) { console.warn('[share] Clipboard failed:', e); }
 
   const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
   const filename = 'RockIt_' + Date.now() + '.' + ext;
@@ -487,8 +516,6 @@ els.shareBtn.addEventListener('click', async () => {
       reader.readAsDataURL(blob);
     });
   }
-
-  const SHARE_CAPTION = 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI';
 
   // Try Capacitor Filesystem + Share (Android app)
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
