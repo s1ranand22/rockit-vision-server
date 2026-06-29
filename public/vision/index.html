@@ -518,31 +518,38 @@ els.shareBtn.addEventListener('click', async () => {
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
     try {
       const base64 = await blobToBase64(state.lastBlob);
-      console.log('[share] Saving via Filesystem...');
+      console.log('[share] Saving, size:', state.lastBlob.size, 'type:', state.lastBlob.type);
 
-      // Save to external storage Movies folder — gives WhatsApp a trusted content URI
-      const saveResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-        path: 'RockItVision/' + filename,
-        data: base64,
-        directory: 'EXTERNAL_STORAGE',
-        recursive: true
-      });
+      let saveResult;
+      try {
+        saveResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+          path: 'RockItVision/' + filename,
+          data: base64,
+          directory: 'EXTERNAL_STORAGE',
+          recursive: true
+        });
+      } catch(e1) {
+        console.warn('[share] EXTERNAL_STORAGE failed:', e1.message, '— trying DOCUMENTS');
+        saveResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+          path: filename,
+          data: base64,
+          directory: 'DOCUMENTS',
+          recursive: true
+        });
+      }
       console.log('[share] Saved to:', saveResult.uri);
 
-      // Copy caption to clipboard so user can paste it
-      try { await navigator.clipboard.writeText(SHARE_CAPTION); } catch(e) {}
-
-      // Share the file — caption already on clipboard
       if (window.Capacitor.Plugins.Share) {
         await window.Capacitor.Plugins.Share.share({
           title: 'RockIt Vision session',
           url: saveResult.uri,
-          dialogTitle: 'Share your RockIt Vision session — caption copied to clipboard!'
+          dialogTitle: 'Share your RockIt Vision session'
         });
       }
       return;
     } catch(e) {
-      console.error('[share] Filesystem error:', e);
+      console.error('[share] Filesystem+Share failed:', e.message || String(e));
+      // Fall through to Web Share API below
     }
   }
 
