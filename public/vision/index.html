@@ -520,11 +520,11 @@ els.shareBtn.addEventListener('click', async () => {
       const base64 = await blobToBase64(state.lastBlob);
       console.log('[share] Saving via Filesystem...');
 
-      // Save with correct extension matching actual format
+      // Save to external storage Movies folder — gives WhatsApp a trusted content URI
       const saveResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-        path: filename,
+        path: 'RockItVision/' + filename,
         data: base64,
-        directory: 'DOCUMENTS',
+        directory: 'EXTERNAL_STORAGE',
         recursive: true
       });
       console.log('[share] Saved to:', saveResult.uri);
