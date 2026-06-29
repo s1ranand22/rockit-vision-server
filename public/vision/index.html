@@ -395,42 +395,77 @@ function connectWebSocket() {
 
 // ── Auto-recording ────────────────────────────────────────────────────────
 function startAutoRecording() {
-  if (!state.stream) return;
+  if (!state.stream) { console.warn('[rec] No stream'); return; }
   try {
     state.recordedChunks = [];
+
+    // Use video-only track to avoid mic conflict with Web Audio API
+    const videoTrack = state.stream.getVideoTracks()[0];
+    if (!videoTrack) { console.warn('[rec] No video track'); return; }
+    const videoOnlyStream = new MediaStream([videoTrack]);
+
     const mimeType = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4']
-      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+      .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch(e) { return false; } }) || '';
+
+    console.log('[rec] Supported mimeType:', mimeType || 'none — using default');
     const options = mimeType ? { mimeType } : {};
-    state.mediaRecorder = new MediaRecorder(state.stream, options);
+
+    state.mediaRecorder = new MediaRecorder(videoOnlyStream, options);
+    state.recordingMimeType = state.mediaRecorder.mimeType || mimeType || 'video/webm';
+
     state.mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) state.recordedChunks.push(e.data);
+      if (e.data && e.data.size > 0) {
+        state.recordedChunks.push(e.data);
+        console.log('[rec] chunk:', e.data.size, 'bytes, total chunks:', state.recordedChunks.length);
+      }
     };
-    state.mediaRecorder.start(1000);
+
+    state.mediaRecorder.onerror = (e) => {
+      console.error('[rec] MediaRecorder error:', e);
+    };
+
+    state.mediaRecorder.start(2000); // collect chunk every 2 seconds
     els.recIndicator.style.display = 'flex';
-    console.log('[rec] Started, mimeType:', mimeType || 'default');
+    console.log('[rec] Started successfully, state:', state.mediaRecorder.state);
   } catch(e) {
-    console.warn('[rec] Could not start:', e);
+    console.error('[rec] Could not start:', e.name, e.message);
   }
 }
 
 function stopAutoRecording() {
   els.recIndicator.style.display = 'none';
-  if (!state.mediaRecorder || state.mediaRecorder.state === 'inactive') return;
-  state.mediaRecorder.onstop = () => {
-    if (state.recordedChunks.length === 0) return;
-    const mimeType = state.mediaRecorder.mimeType || 'video/webm';
+  if (!state.mediaRecorder) { console.warn('[rec] No mediaRecorder to stop'); return; }
+  if (state.mediaRecorder.state === 'inactive') { console.warn('[rec] Already inactive'); return; }
+
+  const recorder = state.mediaRecorder;
+  const mimeType = state.recordingMimeType || 'video/webm';
+  state.mediaRecorder = null;
+
+  recorder.onstop = () => {
+    console.log('[rec] onstop fired, chunks:', state.recordedChunks.length);
+    if (state.recordedChunks.length === 0) {
+      console.warn('[rec] No chunks recorded');
+      return;
+    }
     const blob = new Blob(state.recordedChunks, { type: mimeType });
     state.recordedChunks = [];
     state.lastBlob = blob;
-    console.log('[rec] Stopped, size:', blob.size, 'type:', mimeType);
-    if (blob.size > 5000) {
-      const mb = (blob.size/1024/1024).toFixed(1);
-      els.shareInfo.textContent = mb + ' MB · tap Share to send to WhatsApp, Instagram, etc.';
+    console.log('[rec] Blob created, size:', blob.size, 'type:', mimeType);
+    if (blob.size > 1000) {
+      const mb = (blob.size / 1024 / 1024).toFixed(1);
+      els.shareInfo.textContent = mb + ' MB · tap Share to post to Instagram, WhatsApp, etc.';
       els.shareSheet.style.display = 'flex';
+    } else {
+      console.warn('[rec] Blob too small:', blob.size);
     }
   };
-  state.mediaRecorder.stop();
-  state.mediaRecorder = null;
+
+  try {
+    recorder.stop();
+    console.log('[rec] stop() called');
+  } catch(e) {
+    console.error('[rec] Error stopping:', e);
+  }
 }
 
 // Share button handler
