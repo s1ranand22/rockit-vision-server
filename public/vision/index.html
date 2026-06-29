@@ -173,6 +173,7 @@ canvas#frameCanvas { display:none; }
     <div class="share-panel">
       <h3>Session recorded ✓</h3>
       <p id="shareInfo">Your session has been recorded.</p>
+      <p style="font-size:11px;color:#a78bfa;margin:-8px 0 12px;">Caption copied to clipboard — paste it after sharing the video</p>
       <button class="share-btn-primary" id="shareBtn">Share video</button>
       <button class="share-btn-secondary" onclick="document.getElementById('shareSheet').style.display='none'">Dismiss</button>
     </div>
@@ -404,7 +405,8 @@ function startAutoRecording() {
     if (!videoTrack) { console.warn('[rec] No video track'); return; }
     const videoOnlyStream = new MediaStream([videoTrack]);
 
-    const mimeType = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4']
+    // Use video/mp4 — required for WhatsApp/Instagram sharing
+    const mimeType = ['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
       .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch(e) { return false; } }) || '';
 
     console.log('[rec] Supported mimeType:', mimeType || 'none — using default');
@@ -486,28 +488,34 @@ els.shareBtn.addEventListener('click', async () => {
     });
   }
 
+  const SHARE_CAPTION = 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI';
+
   // Try Capacitor Filesystem + Share (Android app)
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
     try {
       const base64 = await blobToBase64(state.lastBlob);
       console.log('[share] Saving via Filesystem...');
 
-      // Save to Documents directory
+      // Always save as mp4 extension for app compatibility
+      const saveFilename = filename.replace('.webm', '.mp4');
+
       const saveResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-        path: filename,
+        path: saveFilename,
         data: base64,
         directory: 'DOCUMENTS',
         recursive: true
       });
       console.log('[share] Saved to:', saveResult.uri);
 
-      // Share the saved file
+      // Copy caption to clipboard so user can paste it
+      try { await navigator.clipboard.writeText(SHARE_CAPTION); } catch(e) {}
+
+      // Share the file — caption already on clipboard
       if (window.Capacitor.Plugins.Share) {
         await window.Capacitor.Plugins.Share.share({
           title: 'RockIt Vision session',
-          text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI',
           url: saveResult.uri,
-          dialogTitle: 'Share your RockIt Vision session'
+          dialogTitle: 'Share your RockIt Vision session — caption copied to clipboard!'
         });
       }
       return;
