@@ -452,11 +452,6 @@ function startAutoRecording() {
     console.error('[rec] Could not start:', e.name, e.message);
   }
 }
-    console.log('[rec] Started successfully, state:', state.mediaRecorder.state);
-  } catch(e) {
-    console.error('[rec] Could not start:', e.name, e.message);
-  }
-}
 
 function stopAutoRecording() {
   els.recIndicator.style.display = 'none';
