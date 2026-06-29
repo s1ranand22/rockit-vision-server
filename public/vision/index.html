@@ -499,7 +499,9 @@ els.shareBtn.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(SHARE_CAPTION); console.log('[share] Caption copied to clipboard'); }
   catch(e) { console.warn('[share] Clipboard failed:', e); }
 
-  const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  // Use correct extension based on actual recorded mime type
+  const actualMime = state.lastBlob.type || 'video/webm';
+  const ext = actualMime.includes('mp4') ? 'mp4' : 'webm';
   const filename = 'RockIt_' + Date.now() + '.' + ext;
 
   // Convert blob to base64
@@ -518,11 +520,9 @@ els.shareBtn.addEventListener('click', async () => {
       const base64 = await blobToBase64(state.lastBlob);
       console.log('[share] Saving via Filesystem...');
 
-      // Always save as mp4 extension for app compatibility
-      const saveFilename = filename.replace('.webm', '.mp4');
-
+      // Save with correct extension matching actual format
       const saveResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-        path: saveFilename,
+        path: filename,
         data: base64,
         directory: 'DOCUMENTS',
         recursive: true
