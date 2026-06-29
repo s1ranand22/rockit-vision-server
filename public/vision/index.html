@@ -475,30 +475,48 @@ els.shareBtn.addEventListener('click', async () => {
 
   const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
   const filename = 'RockIt_' + Date.now() + '.' + ext;
-  const url = URL.createObjectURL(state.lastBlob);
 
-  // Try Capacitor native Share plugin first (works in Android app)
-  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
-    try {
-      // First save the file so it has a real path
-      const a = document.createElement('a');
-      a.href = url; a.download = filename; a.click();
-      // Wait a moment then share
-      setTimeout(async () => {
-        try {
-          await window.Capacitor.Plugins.Share.share({
-            title: 'RockIt Vision session',
-            text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI',
-            dialogTitle: 'Share your RockIt Vision session'
-          });
-        } catch(e) { console.warn('[share] Capacitor share:', e); }
-      }, 1000);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-      return;
-    } catch(e) { console.warn('[share] Capacitor plugin error:', e); }
+  // Convert blob to base64
+  async function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
-  // Try Web Share API with file
+  // Try Capacitor Filesystem + Share (Android app)
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+    try {
+      const base64 = await blobToBase64(state.lastBlob);
+      console.log('[share] Saving via Filesystem...');
+
+      // Save to Documents directory
+      const saveResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+        path: filename,
+        data: base64,
+        directory: 'DOCUMENTS',
+        recursive: true
+      });
+      console.log('[share] Saved to:', saveResult.uri);
+
+      // Share the saved file
+      if (window.Capacitor.Plugins.Share) {
+        await window.Capacitor.Plugins.Share.share({
+          title: 'RockIt Vision session',
+          text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI',
+          url: saveResult.uri,
+          dialogTitle: 'Share your RockIt Vision session'
+        });
+      }
+      return;
+    } catch(e) {
+      console.error('[share] Filesystem error:', e);
+    }
+  }
+
+  // Try Web Share API with file (browser)
   if (navigator.canShare) {
     try {
       const file = new File([state.lastBlob], filename, { type: state.lastBlob.type });
@@ -508,13 +526,13 @@ els.shareBtn.addEventListener('click', async () => {
           title: 'RockIt Vision session',
           text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI'
         });
-        URL.revokeObjectURL(url);
         return;
       }
     } catch(e) { if (e.name !== 'AbortError') console.warn('[share] WebShare:', e); }
   }
 
-  // Fallback: just download
+  // Fallback: download
+  const url = URL.createObjectURL(state.lastBlob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
