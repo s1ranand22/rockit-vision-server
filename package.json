@@ -1,19 +1,14 @@
 {
   "name": "rockit-vision-server",
   "version": "1.0.0",
-  "description": "RockIt Vision — AI live assistant server with Gemini Live API proxy",
+  "description": "RockIt Vision — AI live assistant server",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
+  "scripts": { "start": "node server.js" },
   "dependencies": {
     "express": "^4.18.2",
     "ws": "^8.16.0",
     "dotenv": "^16.3.1"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "engines": { "node": ">=18.0.0" },
   "private": true
 }

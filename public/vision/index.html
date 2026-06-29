@@ -10,203 +10,82 @@
 <meta name="apple-mobile-web-app-title" content="RockIt Vision">
 <link rel="manifest" href="/vision/manifest.json">
 <link rel="apple-touch-icon" href="/vision/icon-192.png">
+<title>RockIt Vision</title>
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/vision/sw.js').then(r =>
-      console.log('[sw] registered', r.scope)
-    ).catch(e => console.warn('[sw] failed', e));
+    navigator.serviceWorker.register('/vision/sw.js').catch(e => console.warn('[sw]', e));
   }
 </script>
-<title>RockIt Vision</title>
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: #0b0b0d;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: #f2f2f0;
-    overflow: hidden;
-  }
-  #app { position: relative; width: 100%; height: 100vh; height: 100dvh; }
-
-  video#camera {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    object-fit: cover; background: #000;
-  }
-  canvas#frameCanvas { display: none; }
-
-  .top-bar {
-    position: absolute; top: 0; left: 0; right: 0;
-    padding: max(12px, env(safe-area-inset-top)) 14px 10px;
-    display: flex; align-items: center; justify-content: space-between;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
-    z-index: 10;
-  }
-  .brand { font-size: 14px; font-weight: 600; letter-spacing: 0.2px; }
-  .status-pill {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 11px; padding: 5px 10px; border-radius: 999px;
-    background: rgba(255,255,255,0.12); backdrop-filter: blur(6px);
-  }
-  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #888; }
-  .status-dot.connected { background: #34d399; }
-  .status-dot.connecting { background: #fbbf24; animation: pulse 1s infinite; }
-  .status-dot.error { background: #f87171; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-  .mode-bar {
-    position: absolute; top: 56px; left: 0; right: 0;
-    display: flex; gap: 6px; padding: 0 14px; z-index: 10;
-    overflow-x: auto; scrollbar-width: none;
-  }
-  .mode-bar::-webkit-scrollbar { display: none; }
-  .mode-chip {
-    flex: none; font-size: 12px; padding: 6px 12px; border-radius: 999px;
-    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
-    color: #e5e5e3; white-space: nowrap;
-  }
-  .mode-chip.active { background: #f2f2f0; color: #0b0b0d; border-color: #f2f2f0; font-weight: 600; }
-
-  .transcript-area {
-    position: absolute; left: 14px; right: 14px; bottom: 168px;
-    max-height: 30%; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 6px; z-index: 9;
-  }
-  .bubble {
-    max-width: 86%; padding: 8px 12px; border-radius: 14px;
-    font-size: 13px; line-height: 1.4; backdrop-filter: blur(6px);
-  }
-  .bubble.assistant { align-self: flex-start; background: rgba(124,108,255,0.28); border: 1px solid rgba(124,108,255,0.4); border-bottom-left-radius: 4px; }
-  .bubble.user { align-self: flex-end; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.18); border-bottom-right-radius: 4px; }
-  .bubble.system { align-self: center; background: rgba(248,113,113,0.18); border: 1px solid rgba(248,113,113,0.35); color: #fecaca; font-size: 11.5px; }
-
-  .bottom-panel {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    padding: 10px 14px max(14px, env(safe-area-inset-bottom));
-    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
-    z-index: 10;
-  }
-  .output-row {
-    display: flex; align-items: center; justify-content: center; gap: 10px;
-    margin-bottom: 10px;
-  }
-  .output-toggle {
-    display: flex; background: rgba(255,255,255,0.1); border-radius: 999px; padding: 3px;
-    font-size: 11.5px;
-  }
-  .output-toggle button {
-    border: none; background: transparent; color: #c9c9c6; padding: 6px 12px;
-    border-radius: 999px; font-size: 11.5px; font-weight: 500;
-  }
-  .output-toggle button.active { background: #f2f2f0; color: #0b0b0d; }
-
-  .controls-row {
-    display: flex; align-items: center; justify-content: center; gap: 16px;
-  }
-  .mic-level-ring {
-    position: absolute; inset: -6px; border-radius: 50%;
-    border: 2px solid rgba(52,211,153,0.6);
-    transform: scale(1); opacity: 0; transition: transform 0.08s linear, opacity 0.08s linear;
-  }
-  .main-btn {
-    position: relative;
-    width: 64px; height: 64px; border-radius: 50%;
-    border: none; background: #f2f2f0; color: #0b0b0d;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 24px;
-  }
-  .main-btn.live { background: #ef4444; color: white; }
-  .side-btn {
-    width: 44px; height: 44px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08);
-    color: #f2f2f0; display: flex; align-items: center; justify-content: center; font-size: 18px;
-  }
-  .side-btn.off { opacity: 0.4; }
-
-  .setup-screen {
-    position: absolute; inset: 0; z-index: 30;
-    background: #0b0b0d; display: flex; flex-direction: column;
-    padding: max(24px, env(safe-area-inset-top)) 22px 24px;
-    overflow-y: auto;
-  }
-  .setup-screen h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
-  .setup-screen p.sub { font-size: 13px; color: #9a9a96; margin: 0 0 20px; line-height: 1.5; }
-  .field-label { font-size: 12px; color: #b5b5b1; margin: 16px 0 6px; font-weight: 500; }
-  .field-input {
-    width: 100%; padding: 11px 12px; border-radius: 10px;
-    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
-    color: #f2f2f0; font-size: 14px; outline: none;
-  }
-  .field-input:focus { border-color: #7c6cff; }
-  .field-input option { background: #1a1a2e; color: #f2f2f0; }
-  .start-btn {
-    margin-top: 22px; width: 100%; padding: 13px; border-radius: 10px;
-    background: #f2f2f0; color: #0b0b0d; border: none; font-size: 14.5px; font-weight: 600;
-  }
-  .start-btn:disabled { opacity: 0.4; }
-  .note-box {
-    margin-top: 18px; padding: 10px 12px; border-radius: 10px;
-    background: rgba(124,108,255,0.12); border: 1px solid rgba(124,108,255,0.25);
-    font-size: 12px; color: #c9c4ff; line-height: 1.5;
-  }
-  .link-line { font-size: 11.5px; color: #75756f; margin-top: 14px; line-height: 1.6; }
-  .link-line a { color: #a9a3ff; }
-
-  .perm-error {
-    position: absolute; inset: 0; z-index: 40; background: rgba(0,0,0,0.92);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 30px; text-align: center; gap: 10px;
-  }
-  .perm-error h2 { font-size: 16px; margin: 0; }
-  .perm-error p { font-size: 13px; color: #b5b5b1; margin: 0; line-height: 1.5; }
-  .perm-error button { margin-top: 8px; padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; font-size: 13px; }
-
-  .hint-overlay {
-    position: absolute; left: 14px; right: 14px; bottom: 168px;
-    z-index: 5; pointer-events: none; text-align: center;
-    color: rgba(255,255,255,0.35); font-size: 12px;
-  }
-
-  /* ── Install prompt banner ── */
-  .install-banner {
-    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-    background: #1e1040; border-top: 1px solid rgba(124,108,255,0.4);
-    padding: 12px 16px 12px;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-    display: flex; align-items: center; gap: 12px;
-    animation: slideUp 0.3s ease;
-  }
-  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-  .install-banner img { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; }
-  .install-banner-text { flex: 1; }
-  .install-banner-text strong { display: block; font-size: 13px; color: #f2f2f0; }
-  .install-banner-text span { font-size: 11.5px; color: #9a9a96; }
-  .install-banner-btn {
-    background: #7c6cff; color: white; border: none;
-    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-    flex-shrink: 0; white-space: nowrap;
-  }
-  .install-banner-close {
-    background: transparent; border: none; color: #75756f;
-    font-size: 18px; padding: 4px; flex-shrink: 0; line-height: 1;
-  }
-  .ios-install-tip {
-    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-    background: #1e1040; border-top: 1px solid rgba(124,108,255,0.4);
-    padding: 14px 16px max(14px, env(safe-area-inset-bottom));
-    text-align: center; font-size: 13px; color: #c9c9c6; line-height: 1.6;
-    animation: slideUp 0.3s ease;
-  }
-  .ios-install-tip strong { color: #f2f2f0; }
-  .ios-install-tip button {
-    margin-top: 8px; background: transparent; border: none;
-    color: #7c6cff; font-size: 13px; text-decoration: underline;
-  }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin:0; padding:0; height:100%; background:#0b0b0d; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:#f2f2f0; overflow:hidden; }
+#app { position:relative; width:100%; height:100vh; height:100dvh; }
+video#camera { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; }
+canvas#frameCanvas { display:none; }
+.top-bar { position:absolute; top:0; left:0; right:0; padding:max(12px,env(safe-area-inset-top)) 14px 10px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent); z-index:10; }
+.brand { font-size:14px; font-weight:600; }
+.status-pill { display:flex; align-items:center; gap:6px; font-size:11px; padding:5px 10px; border-radius:999px; background:rgba(255,255,255,.12); }
+.status-dot { width:7px; height:7px; border-radius:50%; background:#888; }
+.status-dot.connected { background:#34d399; }
+.status-dot.connecting { background:#fbbf24; animation:pulse 1s infinite; }
+.status-dot.error { background:#f87171; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.mode-bar { position:absolute; top:56px; left:0; right:0; display:flex; gap:6px; padding:0 14px; z-index:10; overflow-x:auto; scrollbar-width:none; }
+.mode-bar::-webkit-scrollbar { display:none; }
+.mode-chip { flex:none; font-size:12px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.15); color:#e5e5e3; white-space:nowrap; }
+.mode-chip.active { background:#f2f2f0; color:#0b0b0d; border-color:#f2f2f0; font-weight:600; }
+.transcript-area { position:absolute; left:14px; right:14px; bottom:168px; max-height:30%; overflow-y:auto; display:flex; flex-direction:column; gap:6px; z-index:9; }
+.bubble { max-width:86%; padding:8px 12px; border-radius:14px; font-size:13px; line-height:1.4; }
+.bubble.assistant { align-self:flex-start; background:rgba(124,108,255,.28); border:1px solid rgba(124,108,255,.4); border-bottom-left-radius:4px; }
+.bubble.user { align-self:flex-end; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); border-bottom-right-radius:4px; }
+.bubble.system { align-self:center; background:rgba(248,113,113,.18); border:1px solid rgba(248,113,113,.35); color:#fecaca; font-size:11.5px; }
+.bottom-panel { position:absolute; left:0; right:0; bottom:0; padding:10px 14px max(14px,env(safe-area-inset-bottom)); background:linear-gradient(to top,rgba(0,0,0,.7),transparent); z-index:10; }
+.output-row { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:10px; }
+.output-toggle { display:flex; background:rgba(255,255,255,.1); border-radius:999px; padding:3px; }
+.output-toggle button { border:none; background:transparent; color:#c9c9c6; padding:6px 12px; border-radius:999px; font-size:11.5px; font-weight:500; }
+.output-toggle button.active { background:#f2f2f0; color:#0b0b0d; }
+.controls-row { display:flex; align-items:center; justify-content:center; gap:16px; }
+.mic-level-ring { position:absolute; inset:-6px; border-radius:50%; border:2px solid rgba(52,211,153,.6); transform:scale(1); opacity:0; transition:transform .08s linear,opacity .08s linear; }
+.main-btn { position:relative; width:64px; height:64px; border-radius:50%; border:none; background:#f2f2f0; color:#0b0b0d; display:flex; align-items:center; justify-content:center; font-size:24px; }
+.main-btn.live { background:#ef4444; color:white; }
+.side-btn { width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.2); background:rgba(255,255,255,.08); color:#f2f2f0; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.side-btn.off { opacity:.4; }
+.setup-screen { position:absolute; inset:0; z-index:30; background:#0b0b0d; display:flex; flex-direction:column; padding:max(24px,env(safe-area-inset-top)) 22px 24px; overflow-y:auto; }
+.setup-screen h1 { font-size:19px; font-weight:600; margin:0 0 4px; }
+.setup-screen p.sub { font-size:13px; color:#9a9a96; margin:0 0 20px; line-height:1.5; }
+.field-label { font-size:12px; color:#b5b5b1; margin:16px 0 6px; font-weight:500; }
+.field-input { width:100%; padding:11px 12px; border-radius:10px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); color:#f2f2f0; font-size:14px; outline:none; }
+.field-input:focus { border-color:#7c6cff; }
+.field-input option { background:#1a1a2e; color:#f2f2f0; }
+.start-btn { margin-top:22px; width:100%; padding:13px; border-radius:10px; background:#f2f2f0; color:#0b0b0d; border:none; font-size:14.5px; font-weight:600; }
+.start-btn:disabled { opacity:.4; }
+.note-box { margin-top:18px; padding:10px 12px; border-radius:10px; background:rgba(124,108,255,.12); border:1px solid rgba(124,108,255,.25); font-size:12px; color:#c9c4ff; line-height:1.5; }
+.hint-overlay { position:absolute; left:14px; right:14px; bottom:168px; z-index:5; pointer-events:none; text-align:center; color:rgba(255,255,255,.35); font-size:12px; }
+/* Recording indicator */
+.rec-indicator { display:none; position:absolute; top:max(14px,env(safe-area-inset-top)); left:14px; z-index:20; align-items:center; gap:6px; background:rgba(239,68,68,.85); padding:4px 10px; border-radius:999px; font-size:11px; font-weight:600; }
+.rec-dot { width:7px; height:7px; border-radius:50%; background:white; animation:pulse 1s infinite; }
+/* Share sheet */
+.share-sheet { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.8); align-items:flex-end; justify-content:center; }
+.share-panel { background:#1a1a2e; border-radius:20px 20px 0 0; padding:20px 20px max(28px,env(safe-area-inset-bottom)); width:100%; }
+.share-panel h3 { margin:0 0 4px; font-size:16px; }
+.share-panel p { margin:0 0 16px; font-size:12px; color:#75756f; }
+.share-btn-primary { width:100%; padding:13px; border-radius:10px; border:none; background:#7c6cff; color:white; font-size:14px; font-weight:600; margin-bottom:10px; }
+.share-btn-secondary { width:100%; padding:13px; border-radius:10px; border:none; background:rgba(255,255,255,.1); color:#f2f2f0; font-size:14px; }
+/* PWA install */
+.install-banner { position:fixed; bottom:0; left:0; right:0; z-index:100; background:#1e1040; border-top:1px solid rgba(124,108,255,.4); padding:12px 16px max(12px,env(safe-area-inset-bottom)); display:flex; align-items:center; gap:12px; animation:slideUp .3s ease; }
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.install-banner img { width:40px; height:40px; border-radius:10px; flex-shrink:0; }
+.install-banner-text { flex:1; }
+.install-banner-text strong { display:block; font-size:13px; color:#f2f2f0; }
+.install-banner-text span { font-size:11.5px; color:#9a9a96; }
+.install-btn { background:#7c6cff; color:white; border:none; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; flex-shrink:0; }
+.install-close { background:transparent; border:none; color:#75756f; font-size:18px; padding:4px; flex-shrink:0; }
 </style>
 </head>
 <body>
 <div id="app">
 
+  <!-- Setup screen -->
   <div class="setup-screen" id="setupScreen">
     <h1>RockIt Vision</h1>
     <p class="sub">Your AI-powered live assistant — sees and hears the world with you.</p>
@@ -214,9 +93,9 @@
     <div class="field-label">Assistant mode</div>
     <select class="field-input" id="modeSelect">
       <option value="general">General purpose</option>
-      <option value="shopping">Supermarket shopping</option>
-      <option value="forms">Government form / paperwork</option>
+      <option value="shopping">Supermarket / market shopping</option>
       <option value="vendor">Haggle for me (vendor mode)</option>
+      <option value="forms">Government form / paperwork</option>
       <option value="fashion">Fashion shopping</option>
       <option value="cooking">Cooking assistant</option>
     </select>
@@ -233,23 +112,19 @@
       <option value="auto">Auto-detect / match user</option>
     </select>
 
-
-    <div style="margin-top: 20px; padding: 14px; border-radius: 10px; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.25);">
-      <p style="font-size: 12px; color: #fcd34d; font-weight: 500; margin: 0 0 8px;">Important — please read before using</p>
-      <p style="font-size: 12px; color: #c9c9c6; line-height: 1.6; margin: 0 0 12px;">This app provides AI-generated recommendations on topics including food freshness, pricing, nutrition, cooking, health products, and fashion. These recommendations <strong style="color:#f2f2f0;">can and will sometimes be wrong.</strong> AI vision is imperfect — it may misjudge produce freshness, misread labels, suggest incorrect substitutions, or give outdated price information. Always apply your own judgment before acting on any suggestion. Do not rely solely on this app for decisions involving health, safety, significant spending, or medical products. The app creators are not liable for any loss, harm, or inconvenience arising from use of these recommendations.</p>
-      <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
-        <input type="checkbox" id="disclaimerCheck" style="margin-top: 2px; width: 16px; height: 16px; flex-shrink: 0; accent-color: #7c6cff;">
-        <span style="font-size: 12px; color: #e5e5e3; line-height: 1.5;">I understand that recommendations from this app are AI-generated and may be incorrect. I will use my own judgment and not hold the app or its creators responsible for any outcomes.</span>
+    <div style="margin-top:20px;padding:14px;border-radius:10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);">
+      <p style="font-size:12px;color:#fcd34d;font-weight:500;margin:0 0 8px;">Important — please read before using</p>
+      <p style="font-size:12px;color:#c9c9c6;line-height:1.6;margin:0 0 12px;">This app provides AI-generated recommendations on topics including food freshness, pricing, nutrition, cooking, health products, and fashion. These recommendations <strong style="color:#f2f2f0;">can and will sometimes be wrong.</strong> Always apply your own judgment. Do not rely solely on this app for decisions involving health, safety, or significant spending. The app creators are not liable for any loss or harm.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+        <input type="checkbox" id="disclaimerCheck" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:#7c6cff;">
+        <span style="font-size:12px;color:#e5e5e3;line-height:1.5;">I understand recommendations are AI-generated and may be incorrect. I will use my own judgment.</span>
       </label>
     </div>
 
     <button class="start-btn" id="startBtn" disabled>Start session</button>
 
     <div class="note-box">
-      Your camera and microphone are used only during an active session. Audio and video are streamed to Google Gemini via RockIt Web's secure proxy and are not stored.
-    </div>
-    <div class="link-line">
-      Powered by Google Gemini Live API via RockIt Web.
+      Camera and microphone are used only during active sessions. Audio and video stream directly to Google Gemini via RockIt Web's secure proxy and are not stored.
     </div>
   </div>
 
@@ -261,29 +136,15 @@
     <div class="status-pill"><span class="status-dot" id="statusDot"></span><span id="statusText">idle</span></div>
   </div>
 
-  <div class="mode-bar" id="modeBar"></div>
-
-  <div class="hint-overlay" id="hintOverlay">Point the camera and talk — the assistant sees and hears continuously while live</div>
-
-  <div class="transcript-area" id="transcriptArea"></div>
-
-  <!-- Auto-recording share sheet — shown after session ends -->
-  <div id="autoShareSheet" style="display:none; position:fixed; inset:0; z-index:200;
-    background:rgba(0,0,0,0.8); align-items:flex-end; justify-content:center;">
-    <div style="background:#1a1a2e; border-radius:20px 20px 0 0;
-      padding:20px 20px max(28px,env(safe-area-inset-bottom)); width:100%;
-      font-family:-apple-system,sans-serif; color:#f2f2f0;">
-      <h3 style="margin:0 0 4px; font-size:16px;">Session recorded ✓</h3>
-      <p style="margin:0 0 16px; font-size:12px; color:#75756f;" id="autoShareSize"></p>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <button id="autoShareBtn" style="padding:13px; border-radius:10px; border:none;
-          background:#7c6cff; color:white; font-size:14px; font-weight:600;">Share video</button>
-        <button onclick="document.getElementById('autoShareSheet').style.display='none'"
-          style="padding:13px; border-radius:10px; border:none;
-          background:rgba(255,255,255,0.1); color:#f2f2f0; font-size:14px;">Dismiss</button>
-      </div>
-    </div>
+  <!-- Recording indicator (top left, shown during session) -->
+  <div class="rec-indicator" id="recIndicator">
+    <div class="rec-dot"></div>
+    <span>REC</span>
   </div>
+
+  <div class="mode-bar" id="modeBar"></div>
+  <div class="hint-overlay" id="hintOverlay">Point the camera and talk — the assistant sees and hears continuously while live</div>
+  <div class="transcript-area" id="transcriptArea"></div>
 
   <div class="bottom-panel">
     <div class="output-row">
@@ -292,18 +153,28 @@
         <button data-out="earpiece">Earpiece</button>
       </div>
       <div style="display:flex;align-items:center;gap:6px;margin-left:10px;">
-        <span style="font-size:13px;" aria-hidden="true">🔈</span>
+        <span style="font-size:13px;">🔈</span>
         <input type="range" id="volumeSlider" min="1" max="6" step="0.5" value="3" style="width:80px;">
-        <span style="font-size:13px;" aria-hidden="true">🔊</span>
+        <span style="font-size:13px;">🔊</span>
       </div>
     </div>
     <div class="controls-row">
-      <button class="side-btn" id="camToggle" title="Toggle camera"><i>📷</i></button>
+      <button class="side-btn" id="camToggle">📷</button>
       <button class="main-btn" id="mainBtn">
         <div class="mic-level-ring" id="micRing"></div>
         <span id="mainBtnIcon">▶</span>
       </button>
-      <button class="side-btn" id="muteToggle" title="Mute mic"><i>🎙️</i></button>
+      <button class="side-btn" id="muteToggle">🎙️</button>
+    </div>
+  </div>
+
+  <!-- Share sheet — shown automatically when session ends with a recording -->
+  <div class="share-sheet" id="shareSheet">
+    <div class="share-panel">
+      <h3>Session recorded ✓</h3>
+      <p id="shareInfo">Your session has been recorded.</p>
+      <button class="share-btn-primary" id="shareBtn">Share video</button>
+      <button class="share-btn-secondary" onclick="document.getElementById('shareSheet').style.display='none'">Dismiss</button>
     </div>
   </div>
 
@@ -311,744 +182,373 @@
 
 <script>
 (function() {
-  const MODES = {
-    general: {
-      label: "General",
-      system: "You are RockIt Vision, an always-on, proactive visual and audio assistant viewing the world through the user's phone camera and hearing through their microphone, in real time. Speak naturally and briefly, like a sharp, helpful friend standing next to the user. Only speak when you have something genuinely useful to add — do not narrate everything you see. When you do speak, be concise (1-2 sentences unless asked for detail). If you're unsure what the user needs, ask a short clarifying question rather than guessing."
-    },
-    shopping: {
-      label: "Shopping",
-      system: `You are RockIt Vision, an expert Indian vegetable and fruit market shopping assistant. You have deep knowledge of:
 
-FRESHNESS SIGNALS — what to look for visually:
-- Tomatoes: firm, bright red, no soft spots or wrinkles, green stem still attached
-- Onions: dry papery skin, no sprouting, hard when pressed, no dark patches
-- Potatoes: firm, no green tinge, no sprouting eyes, smooth skin
-- Leafy greens (spinach/methi/coriander): bright green, no yellowing, leaves not wilted or slimy, stems not dried out
-- Bananas: bright yellow with no large black patches for eating now; slightly green if buying for later
-- Mangoes: slight give when pressed, fruity smell at the stem end, no sunken spots
-- Apples: firm, bright colour, no soft spots
-- Grapes: firm, attached to stem, no shrivelling or white mould
-- Bitter gourd/karela: bright green, firm, not yellowing
-- Okra/bhindi: snap test — should snap cleanly, not bend; bright green, tip not dry or hard
-- Cauliflower: white compact florets, no brown spots, fresh green leaves around it
-- Capsicum: firm, glossy skin, heavy for its size, stem green
+const MODES = {
+  general: { label:"General", system:"You are RockIt Vision, an always-on proactive visual and audio assistant viewing the world through the user's phone camera and hearing through their microphone in real time. Speak naturally and briefly, like a sharp helpful friend. Only speak when you have something genuinely useful to add. Be concise (1-2 sentences unless asked for detail)." },
+  shopping: { label:"Shopping", system:`You are RockIt Vision, an expert Indian vegetable and fruit market shopping assistant.
+FRESHNESS: Tomatoes(firm,bright red,no soft spots), Onions(dry skin,no sprouts), Potatoes(firm,no green), Leafy greens(bright,not wilted), Bananas(bright yellow or slightly green), Mangoes(slight give,fruity smell), Bhindi(snaps cleanly,bright green), Cauliflower(white compact florets), Capsicum(firm,glossy,heavy).
+FAIR PRICES Bangalore Jun 2026: Tomatoes Rs20-40/kg, Onions Rs25-40, Potatoes Rs20-35, Beans Rs40-60, Bhindi Rs30-50, Palak Rs15-25/bunch, Coriander Rs5-10/bunch, Bananas(elakki) Rs60-80/dozen, Mangoes(Badami) Rs80-150/kg, Apples Rs120-180/kg, Grapes Rs60-100/kg.
+NEGOTIATION: Counter at 60-70% of quoted price. Bulk: "bisi bisi tegoLthini"/"sab ek saath le raha hoon". Quality: "thoda kharab lag raha hai". Kannada: "Jaasti aagide"(too much),"Kammige kodi"(lower price). Hindi: "Bahut zyada hai","Thoda kam karo".
+Watch camera continuously. Keep responses SHORT.` },
+  vendor: { label:"Haggle for me", system:`You are RockIt Vision in VENDOR MODE — speak DIRECTLY TO THE VENDOR as the user's voice. Phone speaker faces vendor.
+PERSONA: Confident warm experienced Indian shopper. Natural speech, firm but friendly.
+GOALS: Fresh produce → fair price (20-30% below first quote) → get something extra thrown in.
+TACTICS: Counter at 60-70%. "Naale bartheeni"/"Kal phir aaunga"(leave threat). Point out imperfections. "Ella seriyagi ondu rate heli"(bulk deal). "Swalpa hechchu haaki"/"Thoda upar se do"(ask extra). If fair: "Sari, kodthini"/"Theek hai, de do".
+PRICES Bangalore Jun 2026: Tomatoes Rs25-40, Onions Rs25-40, Potatoes Rs20-35, Beans Rs40-60, Bhindi Rs30-50, Bananas(elakki) Rs60-80/dozen, Mangoes(local) Rs80-150/kg.
+RULES: Speak ONLY to vendor. 1-2 sentences per turn. Sound human. End with "Dhanyavada"/"Shukriya".` },
+  forms: { label:"Forms", system:"You are RockIt Vision helping fill out physical forms or paperwork at a government or bank office in real time. Read form fields aloud when camera is pointed at them. Translate or explain English fields. Suggest exactly what to write when asked. Be precise. Keep guidance brief and step-by-step." },
+  fashion: { label:"Fashion", system:`You are RockIt Vision, a sharp personal fashion stylist in a shop in real time.
+EXPERTISE: Indian and Western wear (sarees, salwar kameez, kurtas, lehengas, sherwanis, indo-western). Fabric identification. Colour theory for Indian skin tones. Occasion matching. Indian brands (Westside/Max → W/Fabindia → Anita Dongre/Raw Mango).
+DO: Assess fabric, cut, finish, stitching. Give honest style advice. Check quality (stitching evenness, pilling, lining, print alignment). Call out price vs quality. Coach negotiation for local markets.
+TONE: Trusted stylish friend. No agenda to oversell. Concise. Respond in user's language.` },
+  cooking: { label:"Cooking", system:`You are RockIt Vision, a hands-free cooking assistant. Phone is propped in kitchen. Watch and guide in real time.
+DO: Identify ingredients on camera, ask what to make. Guide ONE step at a time. Call out visual cues: oil shimmer/smoke, onion colour, dough texture, vegetables overdone, tadka spluttering. Practical measurements: "small fistful","size of your palm","two generous pinches". Suggest substitutions immediately. Ask dietary restrictions at start.
+CUISINE: North Indian (dal tadka, paneer, biryani, roti), South Indian (sambar, rasam, dosa, idli, bisibelebath), Karnataka (saaru, chitranna, obbattu), street food, everyday basics.
+TONE: Warm, encouraging. One instruction at a time.
+START: Look at camera and say "I can see [ingredients] — what are we making today?"` }
+};
 
-FAIR PRICES (Bangalore/Karnataka market rates, June 2026 approximate):
-- Tomatoes: Rs 20-40/kg
-- Onions: Rs 25-40/kg
-- Potatoes: Rs 20-35/kg
-- Beans: Rs 40-60/kg
-- Bhindi/okra: Rs 30-50/kg
-- Spinach/palak: Rs 15-25/bunch
-- Coriander: Rs 5-10/bunch
-- Green chillies: Rs 20-40/100g
-- Bananas (elakki): Rs 60-80/dozen
-- Bananas (robusta): Rs 40-60/dozen
-- Mangoes (Alphonso): Rs 200-400/kg
-- Mangoes (Badami/local): Rs 80-150/kg
-- Apples (Shimla): Rs 120-180/kg
-- Grapes: Rs 60-100/kg
-- Cauliflower: Rs 30-50/piece
-- Capsicum: Rs 40-70/kg
+const els = {
+  setupScreen: document.getElementById('setupScreen'),
+  modeSelect:  document.getElementById('modeSelect'),
+  langSelect:  document.getElementById('langSelect'),
+  startBtn:    document.getElementById('startBtn'),
+  camera:      document.getElementById('camera'),
+  frameCanvas: document.getElementById('frameCanvas'),
+  statusDot:   document.getElementById('statusDot'),
+  statusText:  document.getElementById('statusText'),
+  modeBar:     document.getElementById('modeBar'),
+  transcriptArea: document.getElementById('transcriptArea'),
+  mainBtn:     document.getElementById('mainBtn'),
+  mainBtnIcon: document.getElementById('mainBtnIcon'),
+  micRing:     document.getElementById('micRing'),
+  camToggle:   document.getElementById('camToggle'),
+  muteToggle:  document.getElementById('muteToggle'),
+  outputToggle:document.getElementById('outputToggle'),
+  hintOverlay: document.getElementById('hintOverlay'),
+  recIndicator:document.getElementById('recIndicator'),
+  shareSheet:  document.getElementById('shareSheet'),
+  shareBtn:    document.getElementById('shareBtn'),
+  shareInfo:   document.getElementById('shareInfo'),
+};
 
-NEGOTIATION TACTICS — Indian street vendor context:
-- Vendors typically quote 20-40% above their acceptable price
-- Buying multiple items from same vendor = leverage ("bisi bisi tegoLthini, ella seriyagi kodi" / "sab ek saath le raha hoon, sahi rate do")
-- Counter at 60-70% of quoted price, meet somewhere in the middle
-- End-of-day (after 6pm) = vendor more willing to offload, better deals
-- Buying by the kilo not by piece = usually better value
-- If quality is questionable, use it as leverage: "thoda kharab lag raha hai, kam karo"
-- Phrases in Kannada: "Jaasti aagide" (too expensive), "Kammige kodi" (give at lower price), "Chanda aagide?" (is it fresh?), "Kilo genta?" (how much per kilo?)
-- Phrases in Hindi: "Bahut zyada hai" (too much), "Thoda kam karo" (reduce a little), "Fresh hai?" (is it fresh?), "Kilo kitne ka?" (how much per kilo?)
+let state = {
+  mode:'general', lang:'en-IN', outputRoute:'speaker',
+  camOn:true, micMuted:false, live:false,
+  ws:null, stream:null, audioCtx:null,
+  micSourceNode:null, micProcessor:null,
+  playbackCtx:null, gainNode:null, volumeGain:3.0,
+  playbackQueueTime:0, frameIntervalId:null, setupDone:false,
+  mediaRecorder:null, recordedChunks:[], lastBlob:null,
+};
 
-YOUR BEHAVIOUR:
-- Watch through the camera continuously. When the user points at vegetables/fruits, immediately assess freshness and comment on what you see.
-- If you see a price board or hear a price quoted, instantly compare to fair market rate and advise.
-- When the user is about to buy something that looks poor quality, warn them proactively.
-- Coach the user through negotiation in real time — suggest exact phrases to say out loud, in whichever language fits the situation.
-- Keep all responses SHORT — this is a noisy market, user needs quick sharp guidance, not paragraphs.
-- If the user speaks Hindi or Kannada, respond in that language. Otherwise English is fine.`
-    },
-    forms: {
-      label: "Forms / paperwork",
-      system: "You are RockIt Vision, helping the user fill out a physical form or navigate paperwork at an office (e.g. government, bank) in real time via their phone camera and microphone. Read form fields and instructions aloud when the camera is pointed at them, translate or explain any field or term marked in English or another language, suggest exactly what to write in a field if the user asks, and remind the user of any documents or details they mentioned needing earlier in the conversation. Be precise and literal when reading official text — do not paraphrase legal or instructional text, read it as-is. Otherwise keep guidance brief and step-by-step. Use the language the user is speaking in unless they ask for a translation."
-    },
-    vendor: {
-      label: "Haggle for me",
-      system: `You are RockIt Vision operating in VENDOR MODE. You are the user's voice in a live negotiation with a vegetable or fruit vendor at an Indian street market. The phone speaker is pointed at the vendor — you are speaking DIRECTLY TO THE VENDOR, not to the user.
-
-YOUR PERSONA:
-You are a confident, friendly, experienced Indian shopper who knows market prices well. You speak naturally — not robotically. You are warm but firm. You do not get flustered. You know when to push and when to concede gracefully.
-
-YOUR GOALS (in order):
-1. Get the freshest produce
-2. Pay a fair price — ideally 20-30% below the first quoted price
-3. Build enough rapport that the vendor throws in a little extra (called "ondu hechchu kodi" in Kannada or "thoda upar se do" in Hindi)
-
-HOW TO BEHAVE:
-- Listen to what the vendor says and respond naturally and immediately, as a real shopper would
-- Conduct the negotiation in whatever language the vendor is speaking — Kannada, Hindi, or a natural mix (as is common in Bangalore markets)
-- Use natural filler words, hesitations, and market-appropriate phrases — sound human, not like an AI
-- When vendor quotes a price: pause, look skeptical, counter at 60-70% of quoted price
-- Use these real tactics:
-  * "Naale bartheeni" / "Kal phir aaunga" — threatening to come back tomorrow (implies you might not buy today)
-  * Point out any imperfections in the produce visible in frame
-  * Mention a lower price you "just saw" at another stall nearby
-  * If buying multiple items: "Ella seriyagi ondu rate heli" / "Sab ka ek rate batao"
-  * Near the end: "Swalpa hechchu haaki" / "Thoda upar se do" — ask for a little extra free
-- Never sound desperate or in a hurry
-- If the vendor is firm and the price is actually fair, accept gracefully: "Sari, kodthini" / "Theek hai, de do"
-
-FRESHNESS — use the camera:
-- Comment on what you see when examining produce before agreeing to buy
-- If something looks substandard: "Ee tomato swalpa haLedide alla?" / "Ye thoda purana lag raha hai" — use it as leverage
-- Ask to see the bottom of the pile if the top looks better than what they are packing
-
-PRICE KNOWLEDGE (Bangalore, June 2026):
-- Tomatoes: fair Rs 25-40/kg. Above 50 = overpaying.
-- Onions: fair Rs 25-40/kg
-- Potatoes: fair Rs 20-35/kg
-- Beans: fair Rs 40-60/kg
-- Bhindi: fair Rs 30-50/kg
-- Leafy greens: Rs 10-20/bunch
-- Bananas (elakki): Rs 60-80/dozen
-- Mangoes (local/Badami): Rs 80-150/kg
-- Grapes: Rs 60-100/kg
-- Apples: Rs 120-180/kg
-
-IMPORTANT RULES:
-- Speak ONLY to the vendor — short, natural sentences as in real conversation
-- Do NOT explain your reasoning to the user mid-conversation — you ARE the user's voice
-- If the user whispers something to you (speaks quietly), briefly acknowledge it and adapt
-- Keep each turn SHORT — 1-2 sentences max, like real conversation
-- After the deal is done, wrap up warmly: "Dhanyavada" / "Shukriya"`
-    },
-    fashion: {
-      label: "Fashion",
-      system: `You are RockIt Vision, a sharp personal fashion stylist and shopping assistant operating in real time via the user's phone camera and microphone. You can see what the user is looking at — clothes, shoes, jewellery, accessories — and you hear what they and the salesperson say.
-
-YOUR EXPERTISE:
-- Indian fashion context: you understand both Western and Indian wear (sarees, salwar kameez, kurtas, lehengas, sherwanis, kurtis, indo-western fusion)
-- Fabric identification: cotton, linen, silk, chiffon, georgette, polyester, rayon, velvet, denim — assess from visual texture and sheen
-- Colour theory: what works for Indian skin tones, what combinations clash, what is versatile vs very occasion-specific
-- Fit and proportion: how to assess if something will flatter based on how it looks on the hanger or being held up
-- Occasion matching: office, casual, festive, wedding guest, wedding family, party, date
-- Brand and value in the Indian market: fast fashion (Zara, H&M, Myntra labels, Westside, Max), mid-range (W, AND, Global Desi, Fabindia, Biba), premium (Anita Dongre, Raw Mango, Sabyasachi diffusion lines), and local market/street
-
-WHAT YOU DO:
-1. ASSESS — fabric quality, colour, cut, finish, stitching, whether it looks cheap or well-made
-2. STYLE ADVICE — does this suit the occasion? What to pair it with? What to avoid?
-3. COLOUR READING — does this colour work? What skin tone does it suit? Does it clash with what the user already owns?
-4. QUALITY SIGNALS to look for:
-   - Stitching: even, no loose threads, seams lying flat
-   - Fabric: no pilling, not see-through, good weight for the price
-   - Buttons/zips: solid, not plasticky, zips running smoothly
-   - Lining: present where it should be (blazers, formal skirts, lehengas)
-   - Print alignment at seams (misaligned = poor quality control)
-5. PRICE SANITY — if the user tells you the price, say instantly whether it seems fair for that quality
-6. NEGOTIATION — for local markets and boutiques: coach the user or speak directly if asked. Fixed-price chain stores don't negotiate but always ask about ongoing offers, loyalty cards, or card discounts.
-7. ALTERNATIVES — if something is not quite right, say what to look for instead
-
-PROACTIVE BEHAVIOUR:
-- When camera shows a garment being held up: immediately comment on colour, cut, fabric, any issues you spot
-- If you see a price tag: assess value for money right away
-- If the user sounds unsure: help them decide — do not sit on the fence
-- If something is genuinely good: say so clearly and with enthusiasm
-- If something is poor quality or bad value: say so diplomatically but honestly — "the stitching here does not look great for this price"
-
-ASK ONLY WHEN NEEDED (never all at once):
-- "What is the occasion?"
-- "One-time wear or something you want to use often?"
-- "What colours do you already have a lot of?"
-- "More fitted or relaxed?"
-
-TONE: You are a trusted, stylish friend with great taste and no agenda to oversell. You tell the truth. You are concise — the user is standing in a shop, not reading an essay. Respond in whatever language the user speaks. Naturally mix in Hindi or Kannada fashion terms where they fit.`
-    },
-    cooking: {
-      label: "Cooking",
-      system: `You are RockIt Vision, a warm and practical hands-free cooking assistant. The user has their phone propped up in the kitchen — camera pointed at their counter, stove, or ingredients — and their hands are busy cooking. You watch and listen continuously and guide them in real time.
-
-YOUR BEHAVIOUR:
-- You are like a calm, experienced home cook standing in the kitchen with them — encouraging, practical, never fussy
-- Watch the camera actively. When you see ingredients laid out, identify them and either ask what they want to make or suggest dishes if they have not said yet
-- Once cooking starts, guide step by step — give only the NEXT step when it is time, not the whole recipe at once
-- Watch for visual cues and call them out proactively without waiting to be asked:
-  * Oil starting to shimmer or smoke — "oil is ready, add your mustard seeds now" or "too hot, lower the flame a little"
-  * Onions turning golden — "onions look good, time to add your ginger-garlic paste"
-  * Dough looking too dry or sticky — "needs a little more water, it should come together smoothly"
-  * Vegetables looking overdone — "those look ready, take them off before they get mushy"
-  * Tadka starting to splutter — "cover it quickly before the mustard seeds fly"
-- Timings: give countdowns when something needs to rest or simmer ("let that go for about 5 minutes on low, I will watch it with you")
-- Substitutions: if the user says they are missing an ingredient, suggest a practical substitute immediately
-- Quantities: always give measurements in practical terms too — "a small fistful", "about the size of your palm", "two generous pinches" — not just grams
-
-CUISINE KNOWLEDGE — strong on Indian:
-- North Indian: dal tadka, rajma, chole, paneer dishes, rotis, parathas, biryanis, kormas, butter chicken
-- South Indian: sambar, rasam, kootu, aviyal, dosas, idlis, upma, bisibelebath, vangi bath, puliyogare
-- Karnataka specifically: jolada rotti, enne badnekai, saaru, kosambari, chitranna, kesari bath, obbattu
-- Street food: pav bhaji, chaat, gobi manchurian, momos, vada pav
-- Everyday basics: eggs any style, simple stir fries, tadka for any dal, basic marinades, chaas, raita
-- Baking basics: cakes, cookies, banana bread — with oven temperature guidance in both Celsius and the "check with a toothpick" method
-
-DIETARY AWARENESS:
-- Ask at the start if not already clear: vegetarian or non-veg? Any allergies? No onion/garlic? Jain? Diabetic (affects oil and sugar use)?
-- Adapt every suggestion and step accordingly once you know
-
-TONE AND STYLE:
-- Warm, encouraging, never condescending
-- One clear instruction at a time — no walls of text
-- Use what you can see: "until it looks like what is in your pan right now, that golden brown colour" rather than abstract timings alone
-- If the user asks "how does this look?" — give an honest read of what the camera is showing
-- Respond in whatever language the user is cooking in — Hindi, Kannada, or English, or a natural mix
-
-SESSION START:
-Look at what is visible on camera and open with: "I can see [ingredients] — what are we making today?" If nothing visible yet, ask them to show you what they have got.`
-    }
-  };
-
-  const els = {
-    setupScreen: document.getElementById('setupScreen'),
-    modeSelect: document.getElementById('modeSelect'),
-    langSelect: document.getElementById('langSelect'),
-    startBtn: document.getElementById('startBtn'),
-    camera: document.getElementById('camera'),
-    frameCanvas: document.getElementById('frameCanvas'),
-    statusDot: document.getElementById('statusDot'),
-    statusText: document.getElementById('statusText'),
-    modeBar: document.getElementById('modeBar'),
-    transcriptArea: document.getElementById('transcriptArea'),
-    mainBtn: document.getElementById('mainBtn'),
-    mainBtnIcon: document.getElementById('mainBtnIcon'),
-    micRing: document.getElementById('micRing'),
-    camToggle: document.getElementById('camToggle'),
-    muteToggle: document.getElementById('muteToggle'),
-    outputToggle: document.getElementById('outputToggle'),
-    hintOverlay: document.getElementById('hintOverlay'),
-  };
-
-  let state = {
-    mode: 'general',
-    lang: 'en-IN',
-    outputRoute: 'speaker',
-    camOn: true,
-    micMuted: false,
-    live: false,
-    ws: null,
-    stream: null,
-    audioCtx: null,
-    micSourceNode: null,
-    micProcessor: null,
-    playbackCtx: null,
-    gainNode: null,
-    volumeGain: 3.0,
-    playbackQueueTime: 0,
-    frameIntervalId: null,
-    setupDone: false,
-    mediaRecorder: null,
-    recordedChunks: [],
-  };
-
-  Object.keys(MODES).forEach(key => {
-    const chip = document.createElement('button');
-    chip.className = 'mode-chip' + (key === state.mode ? ' active' : '');
-    chip.textContent = MODES[key].label;
-    chip.dataset.mode = key;
-    chip.addEventListener('click', () => {
-      state.mode = key;
-      document.querySelectorAll('.mode-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      addBubble('system', 'Mode switched to ' + MODES[key].label + '. (Takes effect on next session start.)');
-    });
-    els.modeBar.appendChild(chip);
+// Mode chips
+Object.keys(MODES).forEach(key => {
+  const chip = document.createElement('button');
+  chip.className = 'mode-chip' + (key === state.mode ? ' active' : '');
+  chip.textContent = MODES[key].label;
+  chip.dataset.mode = key;
+  chip.addEventListener('click', () => {
+    state.mode = key;
+    document.querySelectorAll('.mode-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    addBubble('system', 'Mode: ' + MODES[key].label + ' (takes effect on next session start)');
   });
+  els.modeBar.appendChild(chip);
+});
 
-  function refreshStartBtn() {
-    const disclaimerOk = document.getElementById('disclaimerCheck').checked;
-    els.startBtn.disabled = !disclaimerOk;
-  }
-  document.getElementById('disclaimerCheck').addEventListener('change', refreshStartBtn);
-  refreshStartBtn();
+// Disclaimer
+document.getElementById('disclaimerCheck').addEventListener('change', () => {
+  els.startBtn.disabled = !document.getElementById('disclaimerCheck').checked;
+});
 
-  function setStatus(s) {
-    els.statusDot.className = 'status-dot ' + s;
-    els.statusText.textContent = s;
-  }
+function setStatus(s) { els.statusDot.className = 'status-dot ' + s; els.statusText.textContent = s; }
 
-  function addBubble(kind, text) {
-    const b = document.createElement('div');
-    b.className = 'bubble ' + kind;
-    b.textContent = text;
-    els.transcriptArea.appendChild(b);
-    els.transcriptArea.scrollTop = els.transcriptArea.scrollHeight;
-    while (els.transcriptArea.children.length > 12) {
-      els.transcriptArea.removeChild(els.transcriptArea.firstChild);
-    }
-  }
+function addBubble(kind, text) {
+  const b = document.createElement('div');
+  b.className = 'bubble ' + kind;
+  b.textContent = text;
+  els.transcriptArea.appendChild(b);
+  els.transcriptArea.scrollTop = els.transcriptArea.scrollHeight;
+  while (els.transcriptArea.children.length > 12) els.transcriptArea.removeChild(els.transcriptArea.firstChild);
+}
 
-  function showPermError(msg) {
-    const div = document.createElement('div');
-    div.className = 'perm-error';
-    div.innerHTML = '<h2>Camera / microphone needed</h2><p>' + msg + '</p><button id="permRetry">Try again</button>';
-    document.getElementById('app').appendChild(div);
-    document.getElementById('permRetry').addEventListener('click', () => {
-      div.remove();
-      startSession();
+async function setupMedia() {
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:640}, height:{ideal:480} },
+      audio: { echoCancellation:true, noiseSuppression:true, channelCount:1 }
     });
+  } catch(e) {
+    addBubble('system', 'Camera/mic access denied: ' + e.message);
+    throw e;
   }
+  els.camera.srcObject = state.stream;
+}
 
-  async function setupMedia() {
-    try {
-      state.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 }
-      });
-    } catch (e) {
-      showPermError('This prototype needs camera and microphone access. Please allow in your browser, or check your phone site permissions. (' + e.message + ')');
-      throw e;
-    }
-    els.camera.srcObject = state.stream;
+function pcmFloatTo16(float32) {
+  const out = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) { let s = Math.max(-1,Math.min(1,float32[i])); out[i] = s < 0 ? s*0x8000 : s*0x7fff; }
+  return out;
+}
+function base64FromBytes(bytes) {
+  let binary=''; const chunk=0x8000;
+  for (let i=0; i<bytes.length; i+=chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i,i+chunk));
+  return btoa(binary);
+}
+
+function setupMicStreaming() {
+  state.audioCtx = new (window.AudioContext||window.webkitAudioContext)({ sampleRate:16000 });
+  state.micSourceNode = state.audioCtx.createMediaStreamSource(state.stream);
+  state.micProcessor = state.audioCtx.createScriptProcessor(2048, 1, 1);
+  state.micSourceNode.connect(state.micProcessor);
+  state.micProcessor.connect(state.audioCtx.destination);
+  state.micProcessor.onaudioprocess = (e) => {
+    if (!state.live || state.micMuted || !state.ws || state.ws.readyState !== 1) return;
+    const input = e.inputBuffer.getChannelData(0);
+    let sum=0; for (let i=0;i<input.length;i++) sum+=Math.abs(input[i]);
+    const level = Math.min(1,(sum/input.length)*8);
+    els.micRing.style.opacity = String(level);
+    els.micRing.style.transform = 'scale(' + (1+level*.5) + ')';
+    const b64 = base64FromBytes(new Uint8Array(pcmFloatTo16(input).buffer));
+    state.ws.send(JSON.stringify({ realtimeInput:{ audio:{ data:b64, mimeType:'audio/pcm;rate=16000' } } }));
+  };
+}
+
+function captureAndSendFrame() {
+  if (!state.live||!state.camOn||!state.ws||state.ws.readyState!==1) return;
+  const video=els.camera; if (!video.videoWidth) return;
+  const canvas=els.frameCanvas, targetW=480;
+  canvas.width=targetW; canvas.height=Math.round(video.videoHeight*(targetW/video.videoWidth));
+  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const reader=new FileReader();
+    reader.onloadend = () => { if (state.ws&&state.ws.readyState===1) state.ws.send(JSON.stringify({ realtimeInput:{ video:{ data:reader.result.split(',')[1], mimeType:'image/jpeg' } } })); };
+    reader.readAsDataURL(blob);
+  }, 'image/jpeg', 0.6);
+}
+
+function ensurePlaybackCtx() {
+  if (!state.playbackCtx) {
+    state.playbackCtx = new (window.AudioContext||window.webkitAudioContext)({ sampleRate:24000 });
+    state.playbackQueueTime = state.playbackCtx.currentTime;
+    state.gainNode = state.playbackCtx.createGain();
+    state.gainNode.gain.value = state.volumeGain;
+    state.gainNode.connect(state.playbackCtx.destination);
   }
+  return state.playbackCtx;
+}
 
-  function pcmFloatTo16(float32) {
-    const out = new Int16Array(float32.length);
-    for (let i = 0; i < float32.length; i++) {
-      let s = Math.max(-1, Math.min(1, float32[i]));
-      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-    }
-    return out;
-  }
+function playPcmChunk(base64Data) {
+  const ctx=ensurePlaybackCtx();
+  const binary=atob(base64Data), bytes=new Uint8Array(binary.length);
+  for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+  const int16=new Int16Array(bytes.buffer), float32=new Float32Array(int16.length);
+  for (let i=0;i<int16.length;i++) float32[i]=int16[i]/32768;
+  const buffer=ctx.createBuffer(1,float32.length,24000);
+  buffer.copyToChannel(float32,0);
+  const source=ctx.createBufferSource();
+  source.buffer=buffer; source.connect(state.gainNode);
+  const startAt=Math.max(ctx.currentTime,state.playbackQueueTime);
+  source.start(startAt); state.playbackQueueTime=startAt+buffer.duration;
+}
 
-  function base64FromBytes(bytes) {
-    let binary = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-    }
-    return btoa(binary);
-  }
+function buildSystemPrompt() {
+  const names={'en-IN':'Indian English','hi-IN':'Hindi','kn-IN':'Kannada','bn-IN':'Bengali','mr-IN':'Marathi','te-IN':'Telugu','ta-IN':'Tamil'};
+  const langNote = state.lang!=='auto' ? ' Respond primarily in '+(names[state.lang]||state.lang)+' unless the user clearly switches language.' : ' Match whatever language the user speaks to you in.';
+  return MODES[state.mode].system + langNote;
+}
 
-  function setupMicStreaming() {
-    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-    state.micSourceNode = state.audioCtx.createMediaStreamSource(state.stream);
-    const bufferSize = 2048;
-    state.micProcessor = state.audioCtx.createScriptProcessor(bufferSize, 1, 1);
-    state.micSourceNode.connect(state.micProcessor);
-    state.micProcessor.connect(state.audioCtx.destination === null ? state.audioCtx.destination : state.audioCtx.destination);
-
-    state.micProcessor.onaudioprocess = (e) => {
-      if (!state.live || state.micMuted || !state.ws || state.ws.readyState !== 1) return;
-      const input = e.inputBuffer.getChannelData(0);
-
-      let sum = 0;
-      for (let i = 0; i < input.length; i++) sum += Math.abs(input[i]);
-      const level = Math.min(1, (sum / input.length) * 8);
-      els.micRing.style.opacity = String(level);
-      els.micRing.style.transform = 'scale(' + (1 + level * 0.5) + ')';
-
-      const pcm16 = pcmFloatTo16(input);
-      const bytes = new Uint8Array(pcm16.buffer);
-      const b64 = base64FromBytes(bytes);
-      state.ws.send(JSON.stringify({
-        realtimeInput: {
-          audio: { data: b64, mimeType: 'audio/pcm;rate=16000' }
-        }
-      }));
-    };
-  }
-
-  function captureAndSendFrame() {
-    if (!state.live || !state.camOn || !state.ws || state.ws.readyState !== 1) return;
-    const video = els.camera;
-    if (!video.videoWidth) return;
-    const canvas = els.frameCanvas;
-    const targetW = 480;
-    const scale = targetW / video.videoWidth;
-    canvas.width = targetW;
-    canvas.height = Math.round(video.videoHeight * scale);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const b64 = reader.result.split(',')[1];
-        if (state.ws && state.ws.readyState === 1) {
-          state.ws.send(JSON.stringify({
-            realtimeInput: {
-              video: { data: b64, mimeType: 'image/jpeg' }
-            }
-          }));
-        }
-      };
-      reader.readAsDataURL(blob);
-    }, 'image/jpeg', 0.6);
-  }
-
-  function ensurePlaybackCtx() {
-    if (!state.playbackCtx) {
-      state.playbackCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-      state.playbackQueueTime = state.playbackCtx.currentTime;
-      state.gainNode = state.playbackCtx.createGain();
-      state.gainNode.gain.value = state.volumeGain;
-      state.gainNode.connect(state.playbackCtx.destination);
-    }
-    return state.playbackCtx;
-  }
-
-  function playPcmChunk(base64Data) {
-    const ctx = ensurePlaybackCtx();
-    const binary = atob(base64Data);
-    const len = binary.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-    const int16 = new Int16Array(bytes.buffer);
-    const float32 = new Float32Array(int16.length);
-    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
-
-    const buffer = ctx.createBuffer(1, float32.length, 24000);
-    buffer.copyToChannel(float32, 0);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(state.gainNode);
-
-    const now = ctx.currentTime;
-    const startAt = Math.max(now, state.playbackQueueTime);
-    source.start(startAt);
-    state.playbackQueueTime = startAt + buffer.duration;
-  }
-
-  function buildSystemPrompt() {
-    const modeCfg = MODES[state.mode];
-    let langNote = '';
-    if (state.lang !== 'auto') {
-      const names = { 'en-IN': 'Indian English', 'hi-IN': 'Hindi', 'kn-IN': 'Kannada', 'bn-IN': 'Bengali', 'mr-IN': 'Marathi', 'te-IN': 'Telugu', 'ta-IN': 'Tamil' };
-      langNote = ' Respond primarily in ' + (names[state.lang] || state.lang) + ' unless the user clearly switches language.';
-    } else {
-      langNote = ' Match whatever language the user speaks to you in.';
-    }
-    return modeCfg.system + langNote;
-  }
-
-  function connectWebSocket() {
-    setStatus('connecting');
-    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = wsProtocol + '//' + location.host + '/vision-ws';
-    const ws = new WebSocket(url);
-    state.ws = ws;
-
-    ws.onopen = () => {
-      // Send system prompt as first message — server uses this to set up Gemini
-      ws.send(JSON.stringify({
-        rockit_setup: {
-          system: buildSystemPrompt(),
-          lang: state.lang,
-          mode: state.mode
-        }
-      }));
-      console.log('[client] Sent system prompt to proxy');
-    };
-
-    ws.onmessage = async (event) => {
-      let dataStr = event.data;
-      if (dataStr instanceof Blob) {
-        dataStr = await dataStr.text();
-      }
-      let msg;
-      try { msg = JSON.parse(dataStr); } catch (e) { return; }
-
-      if (msg.setupComplete) {
-        setStatus('connected');
-        addBubble('system', 'Live — ' + MODES[state.mode].label + ' mode, listening and watching.');
-        state.frameIntervalId = setInterval(captureAndSendFrame, 1000);
-        return;
-      }
-
-      if (msg.serverContent) {
-        const sc = msg.serverContent;
-        if (sc.modelTurn && sc.modelTurn.parts) {
-          for (const part of sc.modelTurn.parts) {
-            if (part.inlineData && part.inlineData.mimeType && part.inlineData.mimeType.indexOf('audio/pcm') === 0) {
-              playPcmChunk(part.inlineData.data);
-            }
-            if (part.text) {
-              addBubble('assistant', part.text);
-            }
-          }
-        }
-        if (sc.outputTranscription && sc.outputTranscription.text) {
-          addBubble('assistant', sc.outputTranscription.text);
-        }
-        if (sc.inputTranscription && sc.inputTranscription.text) {
-          addBubble('user', sc.inputTranscription.text);
-        }
-      }
-    };
-
-    ws.onerror = () => {
-      setStatus('error');
-      addBubble('system', 'Connection error. Check your API key and network, then restart.');
-    };
-
-    ws.onclose = (e) => {
-      setStatus('idle');
-      if (state.live) {
-        addBubble('system', 'Session closed (' + (e.reason || e.code) + ').');
-      }
-      stopSession(false);
-    };
-  }
-
-  async function startSession() {
-    state.mode = els.modeSelect.value;
-    state.lang = els.langSelect.value;
-
-    document.querySelectorAll('.mode-chip').forEach(c => {
-      c.classList.toggle('active', c.dataset.mode === state.mode);
-    });
-
-    if (!state.setupDone) {
-      await setupMedia();
-      setupMicStreaming();
-      state.setupDone = true;
-    }
-
-    els.setupScreen.style.display = 'none';
-    state.live = true;
-    els.mainBtn.classList.add('live');
-    els.mainBtnIcon.textContent = '■';
-    els.hintOverlay.style.display = 'none';
-    if (state.mode === 'vendor') {
-      addBubble('system', 'Vendor mode — point the phone speaker at the vendor and camera at the produce. I will speak directly to them for you.');
-    }
-
-    if (state.audioCtx && state.audioCtx.state === 'suspended') {
-      await state.audioCtx.resume();
-    }
-
-    connectWebSocket();
-
-    // Auto-record the camera stream when session starts
-    try {
-      if (state.stream) {
-        state.recordedChunks = [];
-        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-          ? 'video/webm;codecs=vp9'
-          : MediaRecorder.isTypeSupported('video/webm')
-          ? 'video/webm'
-          : 'video/mp4';
-        state.mediaRecorder = new MediaRecorder(state.stream, { mimeType });
-        state.mediaRecorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) state.recordedChunks.push(e.data);
-        };
-        state.mediaRecorder.start(1000); // collect chunks every second
-        console.log('[recorder] Started, mimeType:', mimeType);
-      }
-    } catch(e) {
-      console.warn('[recorder] Could not start recording:', e);
-    }
-  }
-
-  function stopSession(showSetup) {
-    state.live = false;
-    els.mainBtn.classList.remove('live');
-    els.mainBtnIcon.textContent = '▶';
-    if (state.frameIntervalId) {
-      clearInterval(state.frameIntervalId);
-      state.frameIntervalId = null;
-    }
-    if (state.ws) {
-      try { state.ws.close(); } catch (e) {}
-      state.ws = null;
-    }
-
-    // Stop recording and offer share
-    if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
-      state.mediaRecorder.onstop = () => {
-        if (state.recordedChunks.length > 0) {
-          const blob = new Blob(state.recordedChunks, { type: state.mediaRecorder.mimeType });
-          state.recordedChunks = [];
-          console.log('[recorder] Stopped, size:', blob.size);
-          if (blob.size > 1000) {
-            showRecordingShare(blob);
-          }
-        }
-      };
-      state.mediaRecorder.stop();
-      state.mediaRecorder = null;
-    }
-
-    if (showSetup !== false) {
-      els.setupScreen.style.display = 'flex';
-    }
-  }
-
-  els.mainBtn.addEventListener('click', () => {
-    if (state.live) {
-      stopSession(true);
-    } else {
-      startSession();
-    }
-  });
-
-  els.startBtn.addEventListener('click', () => {
-    if (!document.getElementById('disclaimerCheck').checked) {
-      document.getElementById('disclaimerCheck').closest('div').style.borderColor = '#f87171';
+function connectWebSocket() {
+  setStatus('connecting');
+  const wsProtocol = location.protocol==='https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(wsProtocol+'//'+location.host+'/vision-ws');
+  state.ws = ws;
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ rockit_setup:{ system:buildSystemPrompt(), lang:state.lang, mode:state.mode } }));
+  };
+  ws.onmessage = async (event) => {
+    let dataStr = event.data instanceof Blob ? await event.data.text() : event.data;
+    let msg; try { msg=JSON.parse(dataStr); } catch(e) { return; }
+    if (msg.setupComplete) {
+      setStatus('connected');
+      addBubble('system', 'Live — '+MODES[state.mode].label+' mode.');
+      state.frameIntervalId = setInterval(captureAndSendFrame, 1000);
       return;
     }
-    startSession();
-  });
-
-  els.camToggle.addEventListener('click', () => {
-    state.camOn = !state.camOn;
-    els.camToggle.classList.toggle('off', !state.camOn);
-    if (state.stream) {
-      state.stream.getVideoTracks().forEach(t => t.enabled = state.camOn);
-    }
-  });
-
-  els.muteToggle.addEventListener('click', () => {
-    state.micMuted = !state.micMuted;
-    els.muteToggle.classList.toggle('off', state.micMuted);
-  });
-
-  els.outputToggle.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      els.outputToggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.outputRoute = btn.dataset.out;
-      const ctx = state.playbackCtx;
-      if (ctx && ctx.setSinkId) {
-        ctx.setSinkId(state.outputRoute === 'earpiece' ? 'communications' : 'default').catch(() => {
-          addBubble('system', 'This browser does not support switching output device — earpiece routing is simulated only.');
-        });
-      } else {
-        addBubble('system', 'Output device switching (' + btn.textContent + ') noted — full earpiece/speaker routing support varies by phone browser and will need native wrapping later.');
-      }
-    });
-  });
-
-  document.getElementById('volumeSlider').addEventListener('input', (e) => {
-    state.volumeGain = parseFloat(e.target.value);
-    if (state.gainNode) {
-      state.gainNode.gain.setTargetAtTime(state.volumeGain, state.playbackCtx.currentTime, 0.01);
-    }
-  });
-
-  // ── PWA Install Prompt ────────────────────────────────────────────────────
-  // Don't show if already installed (running in standalone mode)
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-    || window.navigator.standalone === true;
-
-  if (!isStandalone) {
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    const isAndroid = /android/i.test(navigator.userAgent);
-    const dismissed = sessionStorage.getItem('install_dismissed');
-
-    function removeBanner() {
-      const b = document.getElementById('installBanner');
-      if (b) b.remove();
-      sessionStorage.setItem('install_dismissed', '1');
-    }
-
-    if (isIOS && !dismissed) {
-      // iOS: can't trigger native prompt, show manual tip instead
-      setTimeout(() => {
-        const tip = document.createElement('div');
-        tip.className = 'ios-install-tip';
-        tip.id = 'installBanner';
-        tip.innerHTML = `
-          <strong>Add to your home screen</strong><br>
-          Tap <strong>Share ↑</strong> then <strong>"Add to Home Screen"</strong> to use RockIt Vision like an app — no browser needed next time.
-          <br><button onclick="document.getElementById('installBanner').remove(); sessionStorage.setItem('install_dismissed','1')">Dismiss</button>
-        `;
-        document.body.appendChild(tip);
-      }, 3000);
-
-    } else if (isAndroid && !dismissed) {
-      // Android: intercept the native beforeinstallprompt event
-      let deferredPrompt = null;
-
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-
-        // Show our custom banner after 3 seconds
-        setTimeout(() => {
-          if (sessionStorage.getItem('install_dismissed')) return;
-          const banner = document.createElement('div');
-          banner.className = 'install-banner';
-          banner.id = 'installBanner';
-          banner.innerHTML = `
-            <img src="/vision/icon-192.png" alt="RockIt Vision">
-            <div class="install-banner-text">
-              <strong>Add to home screen</strong>
-              <span>Use RockIt Vision like an app</span>
-            </div>
-            <button class="install-banner-btn" id="installBtn">Install</button>
-            <button class="install-banner-close" id="installDismiss">✕</button>
-          `;
-          document.body.appendChild(banner);
-
-          document.getElementById('installBtn').addEventListener('click', async () => {
-            removeBanner();
-            if (!deferredPrompt) return;
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            console.log('[pwa] Install outcome:', outcome);
-            deferredPrompt = null;
-          });
-
-          document.getElementById('installDismiss').addEventListener('click', removeBanner);
-        }, 3000);
-      });
-
-      // If already installed, hide banner
-      window.addEventListener('appinstalled', () => {
-        removeBanner();
-        console.log('[pwa] App installed successfully');
-      });
-    }
-  }
-
-  // ── Auto-recording share handler ──────────────────────────────────────────
-  function showRecordingShare(blob) {
-    const mb = (blob.size / 1024 / 1024).toFixed(1);
-    document.getElementById('autoShareSize').textContent = mb + ' MB · ' + blob.type;
-
-    const sheet = document.getElementById('autoShareSheet');
-    sheet.style.display = 'flex';
-
-    document.getElementById('autoShareBtn').onclick = async () => {
-      sheet.style.display = 'none';
-
-      // Try native Capacitor share first (Android app)
-      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
-        try {
-          // Save blob to a URL and share via native share sheet
-          const url = URL.createObjectURL(blob);
-          await window.Capacitor.Plugins.Share.share({
-            title: 'RockIt Vision session',
-            text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI',
-            url: url,
-            dialogTitle: 'Share your RockIt Vision session'
-          });
-          return;
-        } catch(e) {
-          console.warn('[share] Native share failed:', e);
+    if (msg.serverContent) {
+      const sc=msg.serverContent;
+      if (sc.modelTurn&&sc.modelTurn.parts) {
+        for (const part of sc.modelTurn.parts) {
+          if (part.inlineData&&part.inlineData.mimeType&&part.inlineData.mimeType.startsWith('audio/pcm')) playPcmChunk(part.inlineData.data);
+          if (part.text) addBubble('assistant', part.text);
         }
       }
+      if (sc.outputTranscription&&sc.outputTranscription.text) addBubble('assistant', sc.outputTranscription.text);
+      if (sc.inputTranscription&&sc.inputTranscription.text) addBubble('user', sc.inputTranscription.text);
+    }
+  };
+  ws.onerror = () => { setStatus('error'); addBubble('system', 'Connection error. Check network.'); };
+  ws.onclose = (e) => { setStatus('idle'); if (state.live) addBubble('system', 'Session closed ('+( e.reason||e.code)+').'); stopSession(false); };
+}
 
-      // Fallback: download the file
-      const url = URL.createObjectURL(blob);
-      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'RockIt_' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.' + ext;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+// ── Auto-recording ────────────────────────────────────────────────────────
+function startAutoRecording() {
+  if (!state.stream) return;
+  try {
+    state.recordedChunks = [];
+    const mimeType = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const options = mimeType ? { mimeType } : {};
+    state.mediaRecorder = new MediaRecorder(state.stream, options);
+    state.mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) state.recordedChunks.push(e.data);
     };
+    state.mediaRecorder.start(1000);
+    els.recIndicator.style.display = 'flex';
+    console.log('[rec] Started, mimeType:', mimeType || 'default');
+  } catch(e) {
+    console.warn('[rec] Could not start:', e);
   }
+}
+
+function stopAutoRecording() {
+  els.recIndicator.style.display = 'none';
+  if (!state.mediaRecorder || state.mediaRecorder.state === 'inactive') return;
+  state.mediaRecorder.onstop = () => {
+    if (state.recordedChunks.length === 0) return;
+    const mimeType = state.mediaRecorder.mimeType || 'video/webm';
+    const blob = new Blob(state.recordedChunks, { type: mimeType });
+    state.recordedChunks = [];
+    state.lastBlob = blob;
+    console.log('[rec] Stopped, size:', blob.size, 'type:', mimeType);
+    if (blob.size > 5000) {
+      const mb = (blob.size/1024/1024).toFixed(1);
+      els.shareInfo.textContent = mb + ' MB · tap Share to send to WhatsApp, Instagram, etc.';
+      els.shareSheet.style.display = 'flex';
+    }
+  };
+  state.mediaRecorder.stop();
+  state.mediaRecorder = null;
+}
+
+// Share button handler
+els.shareBtn.addEventListener('click', async () => {
+  if (!state.lastBlob) return;
+  els.shareSheet.style.display = 'none';
+
+  // Try Web Share API with file (works on Android Chrome)
+  if (navigator.canShare) {
+    try {
+      const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([state.lastBlob], 'RockIt_'+Date.now()+'.'+ext, { type:state.lastBlob.type });
+      if (navigator.canShare({ files:[file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'RockIt Vision session',
+          text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI'
+        });
+        return;
+      }
+    } catch(e) { if (e.name !== 'AbortError') console.warn('[share]', e); }
+  }
+
+  // Fallback: download
+  const url = URL.createObjectURL(state.lastBlob);
+  const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  const a = document.createElement('a');
+  a.href=url; a.download='RockIt_'+Date.now()+'.'+ext; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+});
+
+// ── Session control ───────────────────────────────────────────────────────
+async function startSession() {
+  state.mode = els.modeSelect.value;
+  state.lang = els.langSelect.value;
+  document.querySelectorAll('.mode-chip').forEach(c => c.classList.toggle('active', c.dataset.mode===state.mode));
+  if (!state.setupDone) { await setupMedia(); setupMicStreaming(); state.setupDone=true; }
+  els.setupScreen.style.display='none';
+  state.live=true;
+  els.mainBtn.classList.add('live');
+  els.mainBtnIcon.textContent='■';
+  els.hintOverlay.style.display='none';
+  if (state.mode==='vendor') addBubble('system','Vendor mode — point speaker at vendor, camera at produce. I will negotiate directly.');
+  if (state.audioCtx&&state.audioCtx.state==='suspended') await state.audioCtx.resume();
+  try { if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{}); } catch(e) {}
+  startAutoRecording();
+  connectWebSocket();
+}
+
+function stopSession(showSetup) {
+  state.live=false;
+  els.mainBtn.classList.remove('live');
+  els.mainBtnIcon.textContent='▶';
+  if (state.frameIntervalId) { clearInterval(state.frameIntervalId); state.frameIntervalId=null; }
+  if (state.ws) { try { state.ws.close(); } catch(e) {} state.ws=null; }
+  stopAutoRecording();
+  if (showSetup!==false) els.setupScreen.style.display='flex';
+}
+
+// ── Button handlers ────────────────────────────────────────────────────────
+els.startBtn.addEventListener('click', () => {
+  if (!document.getElementById('disclaimerCheck').checked) {
+    document.getElementById('disclaimerCheck').closest('div').style.borderColor='#f87171';
+    return;
+  }
+  startSession();
+});
+
+els.mainBtn.addEventListener('click', () => { if (state.live) stopSession(true); else startSession(); });
+els.camToggle.addEventListener('click', () => { state.camOn=!state.camOn; els.camToggle.classList.toggle('off',!state.camOn); if (state.stream) state.stream.getVideoTracks().forEach(t=>t.enabled=state.camOn); });
+els.muteToggle.addEventListener('click', () => { state.micMuted=!state.micMuted; els.muteToggle.classList.toggle('off',state.micMuted); });
+els.outputToggle.querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    els.outputToggle.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); state.outputRoute=btn.dataset.out;
+    if (state.playbackCtx&&state.playbackCtx.setSinkId) state.playbackCtx.setSinkId(state.outputRoute==='earpiece'?'communications':'default').catch(()=>{});
+  });
+});
+document.getElementById('volumeSlider').addEventListener('input', (e) => {
+  state.volumeGain=parseFloat(e.target.value);
+  if (state.gainNode) state.gainNode.gain.setTargetAtTime(state.volumeGain,state.playbackCtx.currentTime,0.01);
+});
+
+// ── PWA install prompt ─────────────────────────────────────────────────────
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+if (!isStandalone) {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const dismissed = sessionStorage.getItem('install_dismissed');
+  if (isIOS && !dismissed) {
+    setTimeout(() => {
+      const tip=document.createElement('div');
+      tip.className='install-banner'; tip.id='installBanner';
+      tip.innerHTML=`<img src="/vision/icon-192.png" alt=""><div class="install-banner-text"><strong>Add to home screen</strong><span>Tap Share ↑ then "Add to Home Screen"</span></div><button class="install-close" onclick="this.closest('.install-banner').remove();sessionStorage.setItem('install_dismissed','1')">✕</button>`;
+      document.body.appendChild(tip);
+    }, 4000);
+  } else if (!isIOS && !dismissed) {
+    let deferredPrompt=null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); deferredPrompt=e;
+      setTimeout(() => {
+        if (sessionStorage.getItem('install_dismissed')) return;
+        const banner=document.createElement('div');
+        banner.className='install-banner'; banner.id='installBanner';
+        banner.innerHTML=`<img src="/vision/icon-192.png" alt=""><div class="install-banner-text"><strong>Add to home screen</strong><span>Use RockIt Vision like an app</span></div><button class="install-btn" id="installBtn">Install</button><button class="install-close" id="installDismiss">✕</button>`;
+        document.body.appendChild(banner);
+        document.getElementById('installBtn').addEventListener('click', async () => {
+          banner.remove(); sessionStorage.setItem('install_dismissed','1');
+          if (!deferredPrompt) return;
+          deferredPrompt.prompt();
+          deferredPrompt=null;
+        });
+        document.getElementById('installDismiss').addEventListener('click', () => {
+          banner.remove(); sessionStorage.setItem('install_dismissed','1');
+        });
+      }, 4000);
+    });
+  }
+}
 
 })();
 </script>
