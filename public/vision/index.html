@@ -473,27 +473,50 @@ els.shareBtn.addEventListener('click', async () => {
   if (!state.lastBlob) return;
   els.shareSheet.style.display = 'none';
 
-  // Try Web Share API with file (works on Android Chrome)
+  const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  const filename = 'RockIt_' + Date.now() + '.' + ext;
+  const url = URL.createObjectURL(state.lastBlob);
+
+  // Try Capacitor native Share plugin first (works in Android app)
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
+    try {
+      // First save the file so it has a real path
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      // Wait a moment then share
+      setTimeout(async () => {
+        try {
+          await window.Capacitor.Plugins.Share.share({
+            title: 'RockIt Vision session',
+            text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI',
+            dialogTitle: 'Share your RockIt Vision session'
+          });
+        } catch(e) { console.warn('[share] Capacitor share:', e); }
+      }, 1000);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      return;
+    } catch(e) { console.warn('[share] Capacitor plugin error:', e); }
+  }
+
+  // Try Web Share API with file
   if (navigator.canShare) {
     try {
-      const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
-      const file = new File([state.lastBlob], 'RockIt_'+Date.now()+'.'+ext, { type:state.lastBlob.type });
-      if (navigator.canShare({ files:[file] })) {
+      const file = new File([state.lastBlob], filename, { type: state.lastBlob.type });
+      if (navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'RockIt Vision session',
           text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI'
         });
+        URL.revokeObjectURL(url);
         return;
       }
-    } catch(e) { if (e.name !== 'AbortError') console.warn('[share]', e); }
+    } catch(e) { if (e.name !== 'AbortError') console.warn('[share] WebShare:', e); }
   }
 
-  // Fallback: download
-  const url = URL.createObjectURL(state.lastBlob);
-  const ext = state.lastBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  // Fallback: just download
   const a = document.createElement('a');
-  a.href=url; a.download='RockIt_'+Date.now()+'.'+ext; a.click();
+  a.href = url; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 });
 
