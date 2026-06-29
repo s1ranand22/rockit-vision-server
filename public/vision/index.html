@@ -261,36 +261,29 @@
     <div class="status-pill"><span class="status-dot" id="statusDot"></span><span id="statusText">idle</span></div>
   </div>
 
-  <!-- Record button — only shown in native Android app -->
-  <button id="recordBtn" style="
-    display:none; position:fixed; bottom:180px; right:14px; z-index:200;
-    width:48px; height:48px; border-radius:50%;
-    border:2px solid rgba(255,255,255,0.3); background:rgba(0,0,0,0.6);
-    color:white; font-size:20px; align-items:center; justify-content:center;
-    backdrop-filter:blur(6px); cursor:pointer;" onclick="toggleRecording()">⏺</button>
-
-  <!-- Share sheet — shown after recording stops -->
-  <div id="shareSheet" style="display:none; position:fixed; inset:0; z-index:300;
-    background:rgba(0,0,0,0.75); align-items:flex-end; justify-content:center;">
-    <div style="background:#1a1a2e; border-radius:20px 20px 0 0;
-      padding:20px 20px 32px; width:100%; font-family:-apple-system,sans-serif; color:#f2f2f0;">
-      <h3 style="margin:0 0 6px; font-size:16px;">Recording saved!</h3>
-      <p style="margin:0 0 8px; font-size:12px; color:#75756f;">Your session has been recorded.</p>
-      <p id="savedPath" style="font-size:11px; color:#7c6cff; word-break:break-all; margin:0 0 16px;"></p>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <button onclick="shareVideo()" style="padding:13px; border-radius:10px; border:none;
-          background:#7c6cff; color:white; font-size:14px; font-weight:600;">Share video</button>
-        <button onclick="closeShareSheet()" style="padding:13px; border-radius:10px; border:none;
-          background:rgba(255,255,255,0.1); color:#f2f2f0; font-size:14px;">Close</button>
-      </div>
-    </div>
-  </div>
-
   <div class="mode-bar" id="modeBar"></div>
 
   <div class="hint-overlay" id="hintOverlay">Point the camera and talk — the assistant sees and hears continuously while live</div>
 
   <div class="transcript-area" id="transcriptArea"></div>
+
+  <!-- Auto-recording share sheet — shown after session ends -->
+  <div id="autoShareSheet" style="display:none; position:fixed; inset:0; z-index:200;
+    background:rgba(0,0,0,0.8); align-items:flex-end; justify-content:center;">
+    <div style="background:#1a1a2e; border-radius:20px 20px 0 0;
+      padding:20px 20px max(28px,env(safe-area-inset-bottom)); width:100%;
+      font-family:-apple-system,sans-serif; color:#f2f2f0;">
+      <h3 style="margin:0 0 4px; font-size:16px;">Session recorded ✓</h3>
+      <p style="margin:0 0 16px; font-size:12px; color:#75756f;" id="autoShareSize"></p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="autoShareBtn" style="padding:13px; border-radius:10px; border:none;
+          background:#7c6cff; color:white; font-size:14px; font-weight:600;">Share video</button>
+        <button onclick="document.getElementById('autoShareSheet').style.display='none'"
+          style="padding:13px; border-radius:10px; border:none;
+          background:rgba(255,255,255,0.1); color:#f2f2f0; font-size:14px;">Dismiss</button>
+      </div>
+    </div>
+  </div>
 
   <div class="bottom-panel">
     <div class="output-row">
@@ -552,6 +545,8 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
     playbackQueueTime: 0,
     frameIntervalId: null,
     setupDone: false,
+    mediaRecorder: null,
+    recordedChunks: [],
   };
 
   Object.keys(MODES).forEach(key => {
@@ -832,6 +827,26 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
     }
 
     connectWebSocket();
+
+    // Auto-record the camera stream when session starts
+    try {
+      if (state.stream) {
+        state.recordedChunks = [];
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : MediaRecorder.isTypeSupported('video/webm')
+          ? 'video/webm'
+          : 'video/mp4';
+        state.mediaRecorder = new MediaRecorder(state.stream, { mimeType });
+        state.mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) state.recordedChunks.push(e.data);
+        };
+        state.mediaRecorder.start(1000); // collect chunks every second
+        console.log('[recorder] Started, mimeType:', mimeType);
+      }
+    } catch(e) {
+      console.warn('[recorder] Could not start recording:', e);
+    }
   }
 
   function stopSession(showSetup) {
@@ -846,6 +861,23 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
       try { state.ws.close(); } catch (e) {}
       state.ws = null;
     }
+
+    // Stop recording and offer share
+    if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
+      state.mediaRecorder.onstop = () => {
+        if (state.recordedChunks.length > 0) {
+          const blob = new Blob(state.recordedChunks, { type: state.mediaRecorder.mimeType });
+          state.recordedChunks = [];
+          console.log('[recorder] Stopped, size:', blob.size);
+          if (blob.size > 1000) {
+            showRecordingShare(blob);
+          }
+        }
+      };
+      state.mediaRecorder.stop();
+      state.mediaRecorder = null;
+    }
+
     if (showSetup !== false) {
       els.setupScreen.style.display = 'flex';
     }
@@ -979,82 +1011,45 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
     }
   }
 
-})();
+  // ── Auto-recording share handler ──────────────────────────────────────────
+  function showRecordingShare(blob) {
+    const mb = (blob.size / 1024 / 1024).toFixed(1);
+    document.getElementById('autoShareSize').textContent = mb + ' MB · ' + blob.type;
 
-// ── Native screen recording (Android app only) ──────────────────────────────
-(function() {
-  const isNativeApp = window.location.search.includes('app=android') ||
-    (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    const sheet = document.getElementById('autoShareSheet');
+    sheet.style.display = 'flex';
 
-  if (!isNativeApp) return;
+    document.getElementById('autoShareBtn').onclick = async () => {
+      sheet.style.display = 'none';
 
-
-  // Show the record button
-  const btn = document.getElementById('recordBtn');
-  if (btn) btn.style.display = 'flex';
-
-  let lastFilePath = null;
-  let busy = false;
-
-  window.toggleRecording = async function() {
-    if (busy) return;
-    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.ScreenRecord) {
-      alert('Screen recording not available in this version.');
-      return;
-    }
-    busy = true;
-    btn.style.opacity = '0.5';
-
-    try {
-      // Always ask native plugin for current state
-      const state = await window.Capacitor.Plugins.ScreenRecord.isRecording();
-      if (!state.recording) {
-        // Not recording — start
-        await window.Capacitor.Plugins.ScreenRecord.startRecording();
-        btn.textContent = '⏹';
-        btn.style.background = 'rgba(239,68,68,0.8)';
-        btn.style.border = '2px solid #ef4444';
-        btn.style.animation = 'recpulse 1.5s infinite';
-      } else {
-        // Recording — stop
-        const result = await window.Capacitor.Plugins.ScreenRecord.stopRecording();
-        btn.textContent = '⏺';
-        btn.style.background = 'rgba(0,0,0,0.6)';
-        btn.style.border = '2px solid rgba(255,255,255,0.3)';
-        btn.style.animation = '';
-        lastFilePath = result.filePath;
-        document.getElementById('savedPath').textContent = result.filePath || '';
-        document.getElementById('shareSheet').style.display = 'flex';
+      // Try native Capacitor share first (Android app)
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
+        try {
+          // Save blob to a URL and share via native share sheet
+          const url = URL.createObjectURL(blob);
+          await window.Capacitor.Plugins.Share.share({
+            title: 'RockIt Vision session',
+            text: 'My AI assistant just helped me out! 🤯 Try RockIt Vision → https://vision.rockit-web.com #rockitvision #AIassistant #IndiaAI',
+            url: url,
+            dialogTitle: 'Share your RockIt Vision session'
+          });
+          return;
+        } catch(e) {
+          console.warn('[share] Native share failed:', e);
+        }
       }
-    } catch(e) {
-      alert('Recording error: ' + (e.message || e));
-    }
 
-    btn.style.opacity = '1';
-    busy = false;
-  };
+      // Fallback: download the file
+      const url = URL.createObjectURL(blob);
+      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'RockIt_' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.' + ext;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    };
+  }
 
-  window.shareVideo = async function() {
-    if (!lastFilePath) return;
-    try {
-      await window.Capacitor.Plugins.Share.share({
-        title: 'RockIt Vision session',
-        text: 'My AI assistant just haggled for me at the market! \uD83E\uDD2F Try RockIt Vision \u2192 https://play.google.com/store/apps/details?id=com.rockitweb.vision #rockitvision #AIassistant #IndiaAI',
-        url: 'file://' + lastFilePath,
-        dialogTitle: 'Share your RockIt Vision session'
-      });
-    } catch (e) { /* user cancelled */ }
-    window.closeShareSheet();
-  };
-
-  window.closeShareSheet = function() {
-    document.getElementById('shareSheet').style.display = 'none';
-  };
-
-  // Add pulse animation for recording state
-  const style = document.createElement('style');
-  style.textContent = '@keyframes recpulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.4)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }';
-  document.head.appendChild(style);
 })();
 </script>
 </body>
