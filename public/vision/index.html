@@ -996,51 +996,38 @@ Look at what is visible on camera and open with: "I can see [ingredients] — wh
   let lastFilePath = null;
   let busy = false;
 
-  // window._rvRecording persists across visibility changes in Capacitor WebView
-  window._rvRecording = window._rvRecording || false;
-
-  function getRecording() { return window._rvRecording === true; }
-  function setRecording(v) {
-    window._rvRecording = v;
-    if (btn) {
-      btn.textContent = v ? '⏹' : '⏺';
-      btn.style.background = v ? 'rgba(239,68,68,0.8)' : 'rgba(0,0,0,0.6)';
-      btn.style.border = v ? '2px solid #ef4444' : '2px solid rgba(255,255,255,0.3)';
-      btn.style.animation = v ? 'recpulse 1.5s infinite' : '';
-      btn.title = v ? 'Stop recording' : 'Record screen';
-    }
-  }
-
-  // Restore visual state on load
-  setRecording(getRecording());
-
   window.toggleRecording = async function() {
     if (busy) return;
     if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.ScreenRecord) {
-      alert('Screen recording plugin not available.');
+      alert('Screen recording not available in this version.');
       return;
     }
-
     busy = true;
     btn.style.opacity = '0.5';
 
-    if (!getRecording()) {
-      try {
+    try {
+      // Always ask native plugin for current state
+      const state = await window.Capacitor.Plugins.ScreenRecord.isRecording();
+      if (!state.recording) {
+        // Not recording — start
         await window.Capacitor.Plugins.ScreenRecord.startRecording();
-        setRecording(true);
-      } catch (e) {
-        alert('Could not start recording: ' + (e.message || e));
-      }
-    } else {
-      try {
+        btn.textContent = '⏹';
+        btn.style.background = 'rgba(239,68,68,0.8)';
+        btn.style.border = '2px solid #ef4444';
+        btn.style.animation = 'recpulse 1.5s infinite';
+      } else {
+        // Recording — stop
         const result = await window.Capacitor.Plugins.ScreenRecord.stopRecording();
-        setRecording(false);
+        btn.textContent = '⏺';
+        btn.style.background = 'rgba(0,0,0,0.6)';
+        btn.style.border = '2px solid rgba(255,255,255,0.3)';
+        btn.style.animation = '';
         lastFilePath = result.filePath;
         document.getElementById('savedPath').textContent = result.filePath || '';
         document.getElementById('shareSheet').style.display = 'flex';
-      } catch (e) {
-        alert('Could not stop recording: ' + (e.message || e));
       }
+    } catch(e) {
+      alert('Recording error: ' + (e.message || e));
     }
 
     btn.style.opacity = '1';
